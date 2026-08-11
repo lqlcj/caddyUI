@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"relay/internal/caddy"
-	"relay/internal/store"
+	"caddyui/internal/caddy"
+	"caddyui/internal/caddybin"
+	"caddyui/internal/certs"
+	"caddyui/internal/store"
 )
 
 // 设置项的 key。
@@ -17,8 +19,10 @@ const (
 
 // Service 是面板的业务门面。
 type Service struct {
-	Store *store.Store
-	Caddy *caddy.Client
+	Store  *store.Store
+	Caddy  *caddy.Client
+	Certs  *certs.Locator
+	Binary *caddybin.Manager
 }
 
 // Render 生成当前应该生效的 Caddyfile，但不下发。
@@ -85,7 +89,9 @@ func (s *Service) Sync() error {
 	return s.Caddy.Load(caddyfile)
 }
 
-// Status 是「配置」页顶部展示的 Caddy 连接状态。
+// ---------- 状态 ----------
+
+// Status 是页面顶部展示的 Caddy 连接状态。
 type Status struct {
 	Addr      string
 	Connected bool

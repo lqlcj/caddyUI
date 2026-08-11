@@ -2,16 +2,19 @@
 
 {{define "content"}}
 <div class="auth-card">
-  <h1 class="auth-title">Relay</h1>
+  <h1 class="auth-title"><span class="brand-mark" aria-hidden="true"></span>CaddyUI</h1>
   <p class="auth-sub">登录管理面板</p>
 
   {{with .Error}}<div class="flash flash-err">{{.}}</div>{{end}}
 
   <form method="post" action="/login" class="form">
     <label class="field">
-      <span class="label">用户名</span>
+      <span class="label">邮箱</span>
+      {{/* 这里刻意用 text 而不是 email：从旧版本升级上来的账号用户名可能不是
+           邮箱，用 email 类型会被浏览器直接拦在提交之前，人就登不进来了。 */}}
       <input type="text" name="username" value="{{.Username}}" required autofocus
-             autocomplete="username">
+             autocomplete="username" inputmode="email" spellcheck="false"
+             placeholder="you@example.com">
     </label>
 
     <label class="field">

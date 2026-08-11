@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"relay/internal/app"
-	"relay/internal/store"
+	"caddyui/internal/app"
+	"caddyui/internal/store"
 )
 
 // Server 持有渲染面板所需的一切。
@@ -64,6 +64,14 @@ func (s *Server) parseTemplates() error {
 		},
 		"join":      func(parts []string, sep string) string { return strings.Join(parts, sep) },
 		"hasPrefix": strings.HasPrefix,
+
+		// fmtDate 只要日期，用在证书有效期上——精确到分钟没有意义。
+		"fmtDate": func(t time.Time) string {
+			if t.IsZero() {
+				return "-"
+			}
+			return t.Format("2006-01-02")
+		},
 	}
 
 	s.tmpl = make(map[string]*template.Template, len(pages))
@@ -119,8 +127,26 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /settings", s.auth(s.handleSettings))
 	mux.HandleFunc("POST /settings/acme", s.auth(s.handleSettingsACME))
 	mux.HandleFunc("POST /settings/password", s.auth(s.handleSettingsPassword))
+	mux.HandleFunc("POST /settings/caddy/check", s.auth(s.handleCaddyCheck))
+	mux.HandleFunc("POST /settings/caddy/upgrade", s.auth(s.handleCaddyUpgrade))
+
+	// 主题切换不需要登录：登录页和初始化页上也有这个按钮。
+	mux.HandleFunc("POST /theme", s.handleThemePublic)
 
 	return securityHeaders(mux)
+}
+
+// handleThemePublic 是 /theme 的入口。它绕开了 auth 中间件（登录页也要能切主题），
+// 所以 CSRF 那套得在这里自己补上。
+//
+// 这个端点本身没什么可攻击的——最坏的情况是别人让你的面板变成深色——但同源
+// 检查基本是白送的，加上没有坏处。
+func (s *Server) handleThemePublic(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil || !checkOrigin(r) {
+		http.Error(w, "请求校验失败", http.StatusBadRequest)
+		return
+	}
+	s.handleTheme(w, r)
 }
 
 // securityHeaders 给所有响应加上基础安全头。CSP 能开到 'self' 这么严，是因为
@@ -158,6 +184,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 	}
 	data["Version"] = s.version
 	data["Path"] = r.URL.Path
+	data["Theme"] = themeFrom(r)
 	data["Flash"] = takeFlash(w, r)
 	if sess := sessionFrom(r.Context()); sess != nil {
 		data["CSRF"] = sess.CSRF
@@ -178,7 +205,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, page string, dat
 
 // ---------- Flash 消息 ----------
 
-const flashCookie = "relay_flash"
+const flashCookie = "caddyui_flash"
 
 // Flash 是一条一次性提示。
 type Flash struct {

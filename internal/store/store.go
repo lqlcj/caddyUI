@@ -109,6 +109,17 @@ var migrations = [][]string{
 			value TEXT NOT NULL
 		)`,
 	},
+
+	// v2 —— 曾经的端口转发表，功能已移除。
+	//
+	// 这一格不能删掉、也不能拿去装别的东西：已经升到 v2 的库会记着
+	// user_version = 2，改动这里只会让它们跳过后面的迁移。空着就好。
+	{},
+
+	// v3 —— 清掉 v2 留下的空表
+	{
+		`DROP TABLE IF EXISTS forwards`,
+	},
 }
 
 func migrate(db *sql.DB) error {

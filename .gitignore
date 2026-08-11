@@ -1,10 +1,11 @@
 # 编译产物
+/caddyui
+/caddyui.exe
 /relay
 /relay.exe
 /caddy
 /caddy.exe
-/deploy/relay
-/deploy/relay-*
+/dist/
 
 # 运行时数据
 /data/

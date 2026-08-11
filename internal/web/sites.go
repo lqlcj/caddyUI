@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"relay/internal/store"
+	"caddyui/internal/store"
 )
 
 func (s *Server) handleSiteList(w http.ResponseWriter, r *http.Request) {
@@ -53,14 +53,24 @@ func (s *Server) renderSiteForm(w http.ResponseWriter, r *http.Request, site *st
 	// 表单里域名一行一个更好编辑。
 	domainsText := strings.ReplaceAll(site.Domains, ",", "\n")
 
-	s.render(w, r, "site_form", map[string]any{
+	data := map[string]any{
 		"Site":        site,
 		"DomainsText": domainsText,
 		"Title":       title,
 		"Action":      action,
 		"IsNew":       isNew,
 		"Error":       errMsg,
-	})
+	}
+
+	// 证书信息只在编辑已有站点时查——新建时域名还没定，更没有证书。
+	// 查的是磁盘上真实存在的文件，不是按规则拼出来的路径，所以显示出来的
+	// 地址一定能直接 scp / cat。
+	if !isNew && s.svc.Certs != nil && s.svc.Certs.Available() {
+		data["Certs"] = s.svc.Certs.LookupAll(site.DomainList())
+		data["CertRoot"] = s.svc.Certs.CertRoot()
+	}
+
+	s.render(w, r, "site_form", data)
 }
 
 func (s *Server) handleSiteCreate(w http.ResponseWriter, r *http.Request) {

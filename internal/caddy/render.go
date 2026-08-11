@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"relay/internal/store"
+	"caddyui/internal/store"
 )
 
 // RenderOptions 是生成 Caddyfile 需要的全部输入。
@@ -23,7 +23,7 @@ type RenderOptions struct {
 func Render(opts RenderOptions) []byte {
 	var b strings.Builder
 
-	b.WriteString("# 本文件由 Relay 面板自动生成，手动修改会在下次保存时被覆盖。\n")
+	b.WriteString("# 本文件由 CaddyUI 面板自动生成，手动修改会在下次保存时被覆盖。\n")
 	b.WriteString("# 需要自定义的内容请写进对应站点的「高级配置」。\n\n")
 
 	// ---- 全局配置 ----

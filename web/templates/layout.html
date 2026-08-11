@@ -1,31 +1,51 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN"{{if .Theme}} data-theme="{{.Theme}}"{{end}}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>{{template "title" .}} · Relay</title>
+<title>{{template "title" .}} · CaddyUI</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/app.css?v={{.Version}}">
 </head>
 <body>
 
+{{/* 主题切换按钮。表单提交是没有 JS 时的兜底路径，有 JS 时前端会拦下来就地切换。
+     data-theme 是当前生效的值，空字符串表示跟随系统。 */}}
+{{define "themeToggle"}}
+<form method="post" action="/theme" class="theme-form" data-theme-form>
+  <input type="hidden" name="theme" value="{{if eq .Theme "dark"}}light{{else}}dark{{end}}">
+  <input type="hidden" name="back" value="{{.Path}}">
+  <button type="submit" class="theme-btn" data-theme-btn
+          title="切换深色 / 浅色" aria-label="切换深色或浅色主题">
+    <span aria-hidden="true" data-theme-icon>{{if eq .Theme "dark"}}☀{{else}}☾{{end}}</span>
+  </button>
+</form>
+{{end}}
+
 {{if .User}}
 <header class="topbar">
   <div class="wrap topbar-inner">
-    <a class="brand" href="/sites">Relay</a>
+    <a class="brand" href="/sites">
+      <span class="brand-mark" aria-hidden="true"></span>CaddyUI
+    </a>
     <nav class="nav">
       <a href="/sites" class="{{if hasPrefix .Path "/sites"}}active{{end}}">站点</a>
       <a href="/config" class="{{if hasPrefix .Path "/config"}}active{{end}}">配置</a>
       <a href="/settings" class="{{if hasPrefix .Path "/settings"}}active{{end}}">设置</a>
     </nav>
-    <form method="post" action="/logout" class="topbar-logout">
-      <input type="hidden" name="csrf" value="{{.CSRF}}">
-      <span class="who">{{.User.Username}}</span>
-      <button type="submit" class="btn btn-ghost btn-sm">退出</button>
-    </form>
+    <div class="topbar-right">
+      {{template "themeToggle" .}}
+      <form method="post" action="/logout">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <span class="who" title="{{.User.Username}}">{{.User.Username}}</span>
+        <button type="submit" class="btn btn-ghost btn-sm">退出</button>
+      </form>
+    </div>
   </div>
 </header>
+{{else}}
+<div class="auth-theme">{{template "themeToggle" .}}</div>
 {{end}}
 
 <main class="wrap main{{if not .User}} main-centered{{end}}">
@@ -36,7 +56,7 @@
 </main>
 
 <footer class="wrap footer">
-  <span>Relay {{.Version}}</span>
+  <span>CaddyUI {{.Version}}</span>
   <span class="dot">·</span>
   <span>超轻量反向代理面板</span>
 </footer>

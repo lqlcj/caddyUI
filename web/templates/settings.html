@@ -12,7 +12,7 @@
   <div class="kv">
     <div class="kv-row">
       <span class="k">Admin 地址</span>
-      <span class="v mono">{{.Status.Addr}}</span>
+      <span class="v mono break">{{.Status.Addr}}</span>
     </div>
     <div class="kv-row">
       <span class="k">状态</span>
@@ -25,11 +25,24 @@
         {{end}}
       </span>
     </div>
+    {{with .DataDir}}
+    <div class="kv-row">
+      <span class="k">数据目录</span>
+      <span class="v mono break">
+        {{.}}
+        {{if not $.CertAvailable}}<span class="tag tag-warn">读不到</span>{{end}}
+      </span>
+    </div>
+    {{end}}
   </div>
   <p class="hint hint-block">
-    这个地址由启动参数 <code>-caddy</code> 或环境变量 <code>RELAY_CADDY_ADMIN</code> 决定，
-    改动后需要重启面板。生产环境建议用 unix socket，例如
-    <code>unix//run/caddy/admin.sock</code>。
+    Admin 地址由启动参数 <code>-caddy</code> 决定，改动后需要重启面板。
+    生产环境建议用 unix socket，例如 <code>unix//run/caddy/admin.sock</code>。
+    {{if not .CertAvailable}}
+    <br><br>
+    面板读不到 Caddy 的数据目录，所以站点编辑页看不到证书路径。
+    如果 Caddy 的数据不在上面这个位置，用 <code>-caddy-data /实际/路径</code> 指定。
+    {{end}}
   </p>
 </section>
 
@@ -41,7 +54,11 @@
     <label class="field">
       <span class="label">联系邮箱</span>
       <input type="email" name="acme_email" value="{{.ACMEEmail}}" placeholder="you@example.com">
-      <span class="hint">证书续期失败时 Let's Encrypt 会往这里发提醒邮件，强烈建议填一个。</span>
+      <span class="hint">
+        创建账号时已经自动填成你的登录邮箱了，一般不用改。
+        证书续期失败时 Let's Encrypt 会往这里发提醒邮件 —— 这是唯一能提前
+        知道证书要出问题的渠道，别清空。
+      </span>
     </label>
 
     <details class="advanced"{{if .ACMECA}} open{{end}}>
@@ -64,6 +81,99 @@
       <button type="submit" class="btn btn-primary">保存</button>
     </div>
   </form>
+</section>
+
+<section class="panel">
+  <h2>Caddy 内核</h2>
+
+  <div class="kv">
+    <div class="kv-row">
+      <span class="k">当前版本</span>
+      <span class="v">
+        {{if .CaddyVersion}}
+          <strong class="mono">{{.CaddyVersion}}</strong>
+          {{if .CaddyOutdated}}
+            <span class="tag tag-warn">有新版本</span>
+          {{else if .CaddyLatest}}
+            <span class="tag tag-ok">已是最新</span>
+          {{end}}
+        {{else}}
+          <span class="muted">读不到（{{.CaddyVersionErr}}）</span>
+        {{end}}
+      </span>
+    </div>
+    {{with .CaddyLatest}}
+    <div class="kv-row">
+      <span class="k">官方最新</span>
+      <span class="v">
+        <span class="mono">{{.Version}}</span>
+        <a href="{{.URL}}" target="_blank" rel="noopener noreferrer" class="small">更新日志</a>
+        <span class="muted small">{{since .CheckedAt.Unix}}检查</span>
+      </span>
+    </div>
+    {{end}}
+    {{with .CaddyBinPath}}
+    <div class="kv-row">
+      <span class="k">文件位置</span>
+      <span class="v mono break">{{.}}</span>
+    </div>
+    {{end}}
+  </div>
+
+  {{/* 升级任务的状态。升级是后台跑的，刷新页面就能看到进展。 */}}
+  {{with .CaddyJob}}
+    {{if eq (printf "%s" .State) "running"}}
+    <div class="banner banner-ok" style="margin:16px 0 0">
+      <strong>正在升级……</strong>
+      <p>下载 + 校验 + 重启，大约 10~60 秒。刷新本页查看结果。</p>
+    </div>
+    {{else if eq (printf "%s" .State) "ok"}}
+    <div class="banner banner-ok" style="margin:16px 0 0">
+      <strong>升级成功</strong>
+      {{with .Log}}<pre class="code" style="margin-top:8px">{{.}}</pre>{{end}}
+    </div>
+    {{else if eq (printf "%s" .State) "failed"}}
+    <div class="banner banner-err" style="margin:16px 0 0">
+      <strong>升级失败 —— 已自动回滚，网站不受影响</strong>
+      <p>{{.Err}}</p>
+      {{with .Log}}<pre class="code" style="margin-top:8px">{{.}}</pre>{{end}}
+    </div>
+    {{end}}
+  {{end}}
+
+  <div class="form-actions" style="margin-top:16px">
+    <form method="post" action="/settings/caddy/check">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button type="submit" class="btn">检查更新</button>
+    </form>
+
+    {{if .CaddyUpgradable}}
+      {{if .CaddyOutdated}}
+      <form method="post" action="/settings/caddy/upgrade"
+            data-confirm="升级 Caddy 到 {{with .CaddyLatest}}{{.Version}}{{end}}？&#10;&#10;升级过程中 Caddy 会重启一次，所有网站会中断几秒钟。&#10;新版本起不来的话会自动回滚。">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <button type="submit" class="btn btn-primary">升级到 {{with .CaddyLatest}}{{.Version}}{{end}}</button>
+      </form>
+      {{end}}
+    {{end}}
+  </div>
+
+  <p class="hint hint-block" style="margin-top:14px">
+    只从 <strong>Caddy 官方 GitHub 仓库</strong>
+    <code>caddyserver/caddy</code> 下载，下载后用官方发布的
+    <strong>SHA-512 校验和</strong>逐字节核对，对不上直接放弃。
+    安装前会先备份现有二进制并试运行新版本，重启后如果服务没起来会自动回滚。
+    <br><br>
+    升级只换 Caddy 这个可执行文件，<strong>证书、站点配置、面板数据都不动</strong>。
+    Caddy 用 <code>--resume</code> 启动，重启后会自己恢复升级前的配置。
+    {{if not .CaddyUpgradable}}
+    <br><br>
+    <span class="tag tag-warn">一键升级不可用</span>
+    {{.CaddyUpgradeBlocked}}<br>
+    可以 SSH 上服务器手动升级：<code>caddy upgrade</code>（需要 root），
+    或者重新跑一次安装脚本。
+    {{end}}
+  </p>
 </section>
 
 <section class="panel">
@@ -95,10 +205,10 @@
   <h2>备份提醒</h2>
   <p class="hint hint-block">
     要完整备份，需要两样东西：<br>
-    1. 面板数据库 <code>data/relay.db</code>（站点列表、账号、配置历史）<br>
-    2. <strong>Caddy 的数据目录</strong>，里面是所有已签发的证书和 ACME 账户密钥。
-    Linux 上通常在 <code>/var/lib/caddy/.local/share/caddy</code>。<br>
-    第 2 项特别容易被忽略——丢了会导致重装后要重新签发全部证书，
+    1. 面板数据库 <code>/var/lib/caddyui/caddyui.db</code>（站点、账号、配置历史）<br>
+    2. <strong>Caddy 的数据目录</strong>{{with .DataDir}} <code>{{.}}</code>{{end}}，
+    里面是所有已签发的证书和 ACME 账户密钥。<br>
+    第 2 项特别容易被忽略 —— 丢了会导致重装后要重新签发全部证书，
     而 Let's Encrypt 对同一组域名有每周 5 张的速率限制，撞上就得等几天。
   </p>
 </section>

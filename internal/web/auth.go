@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,12 +12,15 @@ import (
 	"sync"
 	"time"
 
-	"relay/internal/store"
+	"caddyui/internal/app"
+	"caddyui/internal/store"
 )
 
 // 会话 cookie 的名字与有效期。
+//
+// 名字跟着面板一起从 relay_ 改成了 caddyui_，代价是升级后所有人要重新登录一次。
 const (
-	sessionCookie = "relay_session"
+	sessionCookie = "caddyui_session"
 	sessionTTL    = 14 * 24 * time.Hour
 )
 
@@ -149,21 +153,29 @@ func (s *Server) handleSetupSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username := r.PostFormValue("username")
+	email := store.NormalizeEmail(r.PostFormValue("username"))
 	password := r.PostFormValue("password")
 	confirm := r.PostFormValue("confirm")
 
 	fail := func(msg string) {
-		s.render(w, r, "setup", map[string]any{"Error": msg, "Username": username})
+		s.render(w, r, "setup", map[string]any{"Error": msg, "Username": email})
 	}
 	if password != confirm {
 		fail("两次输入的密码不一致")
 		return
 	}
-	user, err := s.svc.Store.CreateUser(username, password)
+	user, err := s.svc.Store.CreateUser(email, password)
 	if err != nil {
 		fail(err.Error())
 		return
+	}
+
+	// 注册邮箱直接当证书联系邮箱用，省掉「设置里还有一格要填」这一步。
+	//
+	// Let's Encrypt 会往这个地址发证书续期失败的告警，这是唯一能提前知道
+	// 证书要出问题的渠道，不该指望用户自己想起来去填。设置页里随时能改。
+	if err := s.svc.Store.SetSetting(app.SettingACMEEmail, email); err != nil {
+		log.Printf("写入 ACME 联系邮箱失败（不影响使用，可在设置页手动填）: %v", err)
 	}
 
 	if err := s.startSession(w, r, user.ID); err != nil {
@@ -171,7 +183,7 @@ func (s *Server) handleSetupSubmit(w http.ResponseWriter, r *http.Request) {
 		redirect(w, r, "/login")
 		return
 	}
-	flashOK(w, "管理员账号创建成功，开始添加第一个站点吧")
+	flashOK(w, "账号创建成功，%s 已自动设为证书联系邮箱。现在去添加第一个站点吧。", email)
 	redirect(w, r, "/sites")
 }
 
@@ -215,7 +227,7 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	user, err := s.svc.Store.Authenticate(username, password)
 	if err != nil {
 		if errors.Is(err, store.ErrBadCredentials) {
-			fail("用户名或密码错误")
+			fail("邮箱或密码错误")
 			return
 		}
 		fail("登录失败：" + err.Error())

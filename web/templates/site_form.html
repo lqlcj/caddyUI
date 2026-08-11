@@ -106,4 +106,74 @@
     <a href="/sites" class="btn">取消</a>
   </div>
 </form>
+
+{{/* 证书信息。只有编辑已有站点、且面板能读到 Caddy 数据目录时才出现。
+     这里列的是磁盘上真实存在的文件，不是按规则拼出来的路径。 */}}
+{{with .Certs}}
+<section class="panel">
+  <h2>证书文件</h2>
+  <p class="hint hint-block" style="margin-bottom:14px">
+    Caddy 签发的证书就放在这台服务器上，路径如下。需要拿去给别的服务用
+    （比如给 MySQL、邮件服务器配 TLS）时直接复制路径即可。
+    <strong>证书会自动续期，续期后文件原地更新、路径不变</strong>，
+    所以引用这个路径的程序记得配置成定期重载。
+  </p>
+
+  <div class="cert-list">
+    {{range .}}
+    <div class="cert">
+      <div class="cert-head">
+        <span class="cert-domain">{{.Domain}}</span>
+        {{if .Found}}
+          {{if .Expired}}
+            <span class="tag tag-err">已过期</span>
+          {{else if .Expiring}}
+            <span class="tag tag-warn">还有 {{.DaysLeft}} 天到期</span>
+          {{else}}
+            <span class="tag tag-ok">有效</span>
+          {{end}}
+        {{else}}
+          <span class="tag tag-http">尚未签发</span>
+        {{end}}
+      </div>
+
+      {{if .Found}}
+        {{if .Parsed}}
+        <p class="cert-meta">
+          有效期 {{fmtDate .NotBefore}} ~ {{fmtDate .NotAfter}}（还剩 {{.DaysLeft}} 天）
+          ｜ 颁发者 {{.Issuer}}
+        </p>
+        {{end}}
+        <div class="cert-paths">
+          <div class="path-row">
+            <span class="path-label">证书</span>
+            <span class="path-value">{{.CertPath}}</span>
+            <button type="button" class="copy-btn" data-copy="{{.CertPath}}">复制</button>
+          </div>
+          {{with .KeyPath}}
+          <div class="path-row">
+            <span class="path-label">私钥</span>
+            <span class="path-value">{{.}}</span>
+            <button type="button" class="copy-btn" data-copy="{{.}}">复制</button>
+          </div>
+          {{end}}
+        </div>
+      {{else}}
+        <p class="cert-meta" style="margin-bottom:0">
+          这个域名还没有证书文件。第一次通过 HTTPS 访问它时 Caddy 才会去申请，
+          申请成功后刷新本页就能看到路径。
+        </p>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+
+  {{with $.CertRoot}}
+  <p class="hint hint-block" style="margin-top:14px">
+    证书总目录：<code>{{.}}</code>
+    ｜ 私钥文件权限是 0600、属主是 caddy 用户，读它需要 root 或 sudo。
+  </p>
+  {{end}}
+</section>
+{{end}}
 {{end}}

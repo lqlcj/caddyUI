@@ -6,8 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"relay/internal/app"
-	"relay/internal/store"
+	"caddyui/internal/app"
+	"caddyui/internal/caddybin"
+	"caddyui/internal/store"
 )
 
 // handleConfig 展示当前应该生效的 Caddyfile，以及历史版本。
@@ -65,28 +66,113 @@ func (s *Server) handleConfigRollback(w http.ResponseWriter, r *http.Request) {
 // ---------- 设置 ----------
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "settings", map[string]any{
+	data := map[string]any{
 		"ACMEEmail": s.svc.Store.Setting(app.SettingACMEEmail, ""),
 		"ACMECA":    s.svc.Store.Setting(app.SettingACMECA, ""),
 		"Status":    s.svc.Status(),
-	})
+	}
+	if s.svc.Certs != nil {
+		data["CertRoot"] = s.svc.Certs.CertRoot()
+		data["CertAvailable"] = s.svc.Certs.Available()
+		data["DataDir"] = s.svc.Certs.Dir
+	}
+	s.addCaddyVersionData(data)
+	s.render(w, r, "settings", data)
 }
 
-func (s *Server) handleSettingsACME(w http.ResponseWriter, r *http.Request) {
-	email := strings.TrimSpace(r.PostFormValue("acme_email"))
-	ca := strings.TrimSpace(r.PostFormValue("acme_ca"))
+// addCaddyVersionData 填「Caddy 内核」那一块要用的数据。
+//
+// 这里只读缓存、不主动打 GitHub：设置页可能被频繁打开，而 GitHub 未认证接口
+// 是每小时 60 次。想看最新的就点「检查更新」。
+func (s *Server) addCaddyVersionData(data map[string]any) {
+	bin := s.svc.Binary
+	if bin == nil {
+		return
+	}
 
-	// 邮箱和 CA 地址会原样进 Caddyfile 当作一个 token，含空白或大括号会
-	// 破坏配置结构，直接拒掉。
-	if strings.ContainsAny(email, " \t\r\n{}\"'#") {
-		flashErr(w, "邮箱格式不正确。")
+	data["CaddyBinPath"] = bin.BinPath
+	if cur, err := bin.CurrentVersion(); err == nil {
+		data["CaddyVersion"] = cur
+	} else {
+		data["CaddyVersionErr"] = err.Error()
+	}
+
+	if rel := bin.CachedLatest(); rel != nil {
+		data["CaddyLatest"] = rel
+		if cur, ok := data["CaddyVersion"].(string); ok {
+			data["CaddyOutdated"] = caddybin.Newer(cur, rel.Version)
+		}
+	}
+
+	ok, why := bin.HelperAvailable()
+	data["CaddyUpgradable"] = ok
+	data["CaddyUpgradeBlocked"] = why
+
+	if job := bin.Job(); job.State != caddybin.StateIdle {
+		data["CaddyJob"] = job
+	}
+}
+
+// handleCaddyCheck 主动查一次官方最新版本。
+func (s *Server) handleCaddyCheck(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Binary == nil {
 		redirect(w, r, "/settings")
 		return
 	}
-	if email != "" && !strings.Contains(email, "@") {
-		flashErr(w, "邮箱格式不正确。")
+	rel, err := s.svc.Binary.Latest(true)
+	if err != nil {
+		flashErr(w, "检查更新失败：%v", err)
 		redirect(w, r, "/settings")
 		return
+	}
+
+	cur, cerr := s.svc.Binary.CurrentVersion()
+	switch {
+	case cerr != nil:
+		flashOK(w, "官方最新版本是 %s。（读不到本机 Caddy 版本：%v）", rel.Version, cerr)
+	case caddybin.Newer(cur, rel.Version):
+		flashOK(w, "有新版本：%s → %s。", cur, rel.Version)
+	default:
+		flashOK(w, "当前 %s 已经是最新版本。", cur)
+	}
+	redirect(w, r, "/settings")
+}
+
+// handleCaddyUpgrade 触发一次升级。
+//
+// 真正干活的是 root 拥有的助手脚本，面板只是通过 sudo 把它叫起来 ——
+// 权限边界的理由写在 deploy/upgrade-caddy.sh 的注释里。
+//
+// 任务是异步跑的：下载加重启在慢机器上可能要一分钟以上，而且升级过程中 Caddy
+// 会重启，如果用户正是通过 Caddy 反代访问面板的，同步请求会被连带掐断，
+// 结果就看不到了。这里立刻返回，状态在设置页上轮询着看。
+func (s *Server) handleCaddyUpgrade(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Binary == nil {
+		redirect(w, r, "/settings")
+		return
+	}
+	if err := s.svc.Binary.StartUpgrade(); err != nil {
+		flashErr(w, "升级没能开始：%v", err)
+		redirect(w, r, "/settings")
+		return
+	}
+	flashWarn(w, "升级已开始，大约需要 10~60 秒。期间 Caddy 会重启一次，网站会短暂中断几秒。"+
+		"刷新本页查看结果。")
+	redirect(w, r, "/settings")
+}
+
+func (s *Server) handleSettingsACME(w http.ResponseWriter, r *http.Request) {
+	email := store.NormalizeEmail(r.PostFormValue("acme_email"))
+	ca := strings.TrimSpace(r.PostFormValue("acme_ca"))
+
+	// 邮箱会原样进 Caddyfile 当一个 token，含空白或大括号会破坏配置结构。
+	// ValidateEmail 的字符白名单已经把这些挡住了。
+	if email != "" {
+		if err := store.ValidateEmail(email); err != nil {
+			flashErr(w, "%v", err)
+			redirect(w, r, "/settings")
+			return
+		}
 	}
 	if ca != "" && !strings.HasPrefix(ca, "https://") {
 		flashErr(w, "ACME 目录地址必须以 https:// 开头。")

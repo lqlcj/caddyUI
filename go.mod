@@ -1,4 +1,4 @@
-module relay
+module caddyui
 
 go 1.25.0
 

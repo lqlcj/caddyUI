@@ -1,5 +1,5 @@
 [Unit]
-Description=Caddy —— 反向代理数据面（由 Relay 面板下发配置）
+Description=Caddy —— 反向代理数据面（由 CaddyUI 面板下发配置）
 Documentation=https://caddyserver.com/docs/
 After=network-online.target
 Wants=network-online.target

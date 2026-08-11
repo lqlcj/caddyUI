@@ -1,5 +1,5 @@
 [Unit]
-Description=Relay —— 轻量反向代理面板（控制面）
+Description=CaddyUI —— 轻量反向代理面板（控制面）
 After=network-online.target caddy.service
 Wants=network-online.target
 
@@ -9,7 +9,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 
-# 和 Caddy 用同一个用户，这样访问 /run/caddy/admin.sock 不需要额外折腾权限。
+# 和 Caddy 用同一个用户，这样访问 /run/caddy/admin.sock 不需要额外折腾权限，
+# 也刚好能读到 Caddy 数据目录里的证书（站点编辑页要显示证书路径和有效期）。
 User=caddy
 Group=caddy
 
@@ -17,9 +18,9 @@ Group=caddy
 # 万一你把配置改错、导致通过域名访问不到面板了，还能用 http://IP:81 进来回滚。
 # 日常使用建议在面板里加一条站点把自己反代出去走 HTTPS，
 # 然后用防火墙把 81 限制到你自己的 IP。
-ExecStart=/usr/local/bin/relay \
+ExecStart=/usr/local/bin/caddyui \
     -listen 0.0.0.0:81 \
-    -data /var/lib/relay \
+    -data /var/lib/caddyui \
     -caddy unix//run/caddy/admin.sock
 
 Restart=always
@@ -29,8 +30,8 @@ RestartSec=3s
 Environment=GOMEMLIMIT=48MiB
 Environment=GOGC=50
 
-# /var/lib/relay，放 relay.db
-StateDirectory=relay
+# /var/lib/caddyui，放 caddyui.db
+StateDirectory=caddyui
 StateDirectoryMode=0750
 
 # 81 是 1024 以下的特权端口，非 root 用户要靠这个能力才绑得上。
@@ -40,7 +41,10 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=true
+
+# 不能用 ProtectHome=true：Caddy 的证书就放在 caddy 用户的家目录
+# （/var/lib/caddy/.local/share/caddy）下面，开了就读不到证书路径了。
+ProtectHome=false
 
 [Install]
 WantedBy=multi-user.target

@@ -2,17 +2,20 @@
 
 {{define "content"}}
 <div class="auth-card">
-  <h1 class="auth-title">欢迎使用 Relay</h1>
-  <p class="auth-sub">这是第一次运行，先创建一个管理员账号。</p>
+  <h1 class="auth-title"><span class="brand-mark" aria-hidden="true"></span>欢迎使用 CaddyUI</h1>
+  <p class="auth-sub">这是第一次运行，用邮箱创建一个管理员账号。</p>
 
   {{with .Error}}<div class="flash flash-err">{{.}}</div>{{end}}
 
   <form method="post" action="/setup" class="form">
     <label class="field">
-      <span class="label">用户名</span>
-      <input type="text" name="username" value="{{.Username}}" required autofocus
-             autocomplete="username" placeholder="admin">
-      <span class="hint">3~32 位，字母数字和 _ - . </span>
+      <span class="label">邮箱</span>
+      <input type="email" name="username" value="{{.Username}}" required autofocus
+             autocomplete="username" spellcheck="false" placeholder="you@example.com">
+      <span class="hint">
+        这个邮箱同时是登录账号和 HTTPS 证书的联系邮箱 —— 证书续期出问题时
+        Let's Encrypt 会往这里发提醒，不用再单独填一次。
+      </span>
     </label>
 
     <label class="field">

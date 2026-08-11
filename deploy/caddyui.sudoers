@@ -1,0 +1,12 @@
+# CaddyUI 面板升级 Caddy 内核用的 sudo 授权。
+#
+# 只放行一个脚本，而且那个脚本不接受任何参数 —— 下载哪个仓库、什么版本、
+# 校验和对不对，全由脚本自己决定。所以这条规则给出去的能力只有一个：
+# 「把 Caddy 升级到官方最新版」。面板就算被攻破也拿不到别的东西。
+#
+# 前提：/usr/local/lib/caddyui/upgrade-caddy.sh 必须是 root:root 0755，
+# 所在目录也必须 root 所有。只要 caddy 用户能改那个文件，这条规则就等于送 root。
+#
+# 这个文件本身必须是 0440，否则 sudo 会拒绝加载整个 sudoers.d。
+
+caddy ALL=(root) NOPASSWD: /usr/local/lib/caddyui/upgrade-caddy.sh

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Relay 一键卸载脚本
+# CaddyUI 一键卸载脚本
 #
 #   curl -fsSL https://raw.githubusercontent.com/lqlcj/caddyUI/main/uninstall.sh | sudo bash
 #
-# 默认把 Relay、Caddy、以及它们的数据全部删掉，包括已经申请下来的 HTTPS 证书。
+# 默认把 CaddyUI、Caddy、以及它们的数据全部删掉，包括已经申请下来的 HTTPS 证书。
 # 想留着数据和证书（比如只是想重装）：
 #
 #   curl -fsSL .../uninstall.sh | sudo KEEP_DATA=1 bash
@@ -21,10 +21,11 @@ die()  { printf '\033[1;31m错误:\033[0m %s\n' "$*" >&2; exit 1; }
 
 echo
 if [ "$KEEP_DATA" = "1" ]; then
-  warn "即将停止并卸载 Relay / Caddy（保留数据库和证书）"
+  warn "即将停止并卸载 CaddyUI / Caddy（保留数据库和证书）"
 else
   warn "即将删除下面这些东西，包含数据库和 HTTPS 证书，删了要重新申请证书："
-  echo "    /var/lib/relay      面板数据库（站点、账号、配置历史）"
+  echo "    /var/lib/caddyui    面板数据库（站点、账号、配置历史）"
+  echo "    /var/lib/relay      老版本 Relay 的数据库（如果还在）"
   echo "    /var/lib/caddy      Caddy 的证书和 ACME 账户密钥"
   echo "    /etc/caddy          引导配置"
   echo "    caddy 系统用户"
@@ -38,7 +39,8 @@ echo
 
 # ---------- 服务 ----------
 
-for unit in relay caddy; do
+# relay 是老版本的服务名，一并清掉，免得留个抢端口的僵尸。
+for unit in caddyui relay caddy; do
   if systemctl list-unit-files "${unit}.service" >/dev/null 2>&1 \
      && systemctl cat "${unit}.service" >/dev/null 2>&1; then
     info "停止并禁用 ${unit}"
@@ -48,12 +50,18 @@ for unit in relay caddy; do
 done
 
 systemctl daemon-reload
-systemctl reset-failed relay caddy >/dev/null 2>&1 || true
+systemctl reset-failed caddyui relay caddy >/dev/null 2>&1 || true
 
 # ---------- 二进制 ----------
 
-info "删除 relay 二进制"
-rm -f /usr/local/bin/relay
+info "删除面板二进制"
+rm -f /usr/local/bin/caddyui /usr/local/bin/relay
+
+# 升级助手和它的 sudo 授权。这两个一定要删干净：留着一条指向不存在脚本的
+# sudoers 规则没有安全风险，但留着脚本本身就是留了一条没人管的提权入口。
+info "删除升级助手与 sudo 授权"
+rm -f /etc/sudoers.d/caddyui
+rm -rf /usr/local/lib/caddyui
 
 if [ -e /usr/bin/caddy ]; then
   OWNER=""
@@ -70,10 +78,10 @@ fi
 # ---------- 数据 ----------
 
 if [ "$KEEP_DATA" = "1" ]; then
-  info "保留 /var/lib/relay、/var/lib/caddy、/etc/caddy 和 caddy 用户"
+  info "保留 /var/lib/caddyui、/var/lib/relay、/var/lib/caddy、/etc/caddy 和 caddy 用户"
 else
   info "删除配置与数据"
-  rm -rf /etc/caddy /var/lib/relay /var/lib/caddy /run/caddy
+  rm -rf /etc/caddy /var/lib/caddyui /var/lib/relay /var/lib/caddy /run/caddy
   if id caddy >/dev/null 2>&1; then
     info "删除 caddy 用户"
     userdel caddy >/dev/null 2>&1 || warn "caddy 用户没删掉，可能还有进程在用，可稍后手动 userdel caddy"
