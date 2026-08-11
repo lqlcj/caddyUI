@@ -55,14 +55,13 @@
       <span class="label">联系邮箱</span>
       <input type="email" name="acme_email" value="{{.ACMEEmail}}" placeholder="you@example.com">
       <span class="hint">
-        创建账号时已经自动填成你的登录邮箱了，一般不用改。
         证书续期失败时 Let's Encrypt 会往这里发提醒邮件 —— 这是唯一能提前
         知道证书要出问题的渠道，别清空。
       </span>
     </label>
 
     <details class="advanced"{{if .ACMECA}} open{{end}}>
-      <summary>高级选项<span class="summary-hint">一般不用动</span></summary>
+      <summary>高级选项</summary>
       <div class="advanced-body">
         <label class="field">
           <span class="label">自定义 ACME 目录</span>
@@ -158,22 +157,6 @@
     {{end}}
   </div>
 
-  <p class="hint hint-block" style="margin-top:14px">
-    只从 <strong>Caddy 官方 GitHub 仓库</strong>
-    <code>caddyserver/caddy</code> 下载，下载后用官方发布的
-    <strong>SHA-512 校验和</strong>逐字节核对，对不上直接放弃。
-    安装前会先备份现有二进制并试运行新版本，重启后如果服务没起来会自动回滚。
-    <br><br>
-    升级只换 Caddy 这个可执行文件，<strong>证书、站点配置、面板数据都不动</strong>。
-    Caddy 用 <code>--resume</code> 启动，重启后会自己恢复升级前的配置。
-    {{if not .CaddyUpgradable}}
-    <br><br>
-    <span class="tag tag-warn">一键升级不可用</span>
-    {{.CaddyUpgradeBlocked}}<br>
-    可以 SSH 上服务器手动升级：<code>caddy upgrade</code>（需要 root），
-    或者重新跑一次安装脚本。
-    {{end}}
-  </p>
 </section>
 
 <section class="panel">

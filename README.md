@@ -155,7 +155,7 @@ NPM 是 Node.js + Express + React + nginx + certbot(Python) + s6-overlay 打成�
 # 我的博客
 blog.example.com, www.blog.example.com {
 	reverse_proxy http://127.0.0.1:3000 {
-		header_up X-Real-IP {remote_host}
+		header_up X-Real-IP {client_ip}
 	}
 }
 ```

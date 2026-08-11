@@ -61,8 +61,12 @@ func Render(opts RenderOptions) []byte {
 
 		b.WriteString("\treverse_proxy " + site.UpstreamURL() + " {\n")
 		// Caddy 会自动带上 X-Forwarded-For / -Proto / -Host，X-Real-IP 得自己加，
-		// 很多后端（各种 PHP 面板、Gitea 之类）认这个头。
-		b.WriteString("\t\theader_up X-Real-IP {remote_host}\n")
+		// 很多后端（各种 PHP 面板、Gitea 之类）认这个头。这里是覆盖写入，
+		// 顺带把客户端伪造的 X-Real-IP 挡掉。
+		//
+		// 用 {client_ip} 而不是老写法 {remote_host}：没有前置代理时两者结果一样，
+		// 套了 CDN／SLB 时前者会按全局 trusted_proxies 还原出真实访客 IP。
+		b.WriteString("\t\theader_up X-Real-IP {client_ip}\n")
 		if site.UpstreamScheme == "https" && site.SkipTLSVerify {
 			b.WriteString("\t\ttransport http {\n")
 			b.WriteString("\t\t\ttls_insecure_skip_verify\n")
