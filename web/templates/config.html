@@ -1,0 +1,83 @@
+{{define "title"}}配置{{end}}
+
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>配置</h1>
+    <p class="page-sub">面板生成的 Caddyfile，以及可以一键回滚的历史版本</p>
+  </div>
+  <form method="post" action="/config/apply">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button type="submit" class="btn btn-primary">重新下发</button>
+  </form>
+</div>
+
+<div class="banner {{if .Status.Connected}}banner-ok{{else}}banner-err{{end}}">
+  {{if .Status.Connected}}
+  <strong>Caddy 已连接</strong>
+  <p class="mono small">{{.Status.Addr}}</p>
+  {{else}}
+  <strong>Caddy 未连接</strong>
+  <p>{{.Status.Error}}</p>
+  <p class="mono small">{{.Status.Addr}}</p>
+  {{end}}
+</div>
+
+<section class="panel">
+  <h2>当前配置</h2>
+  <p class="hint hint-block">
+    这是根据当前站点列表生成的内容。Caddy 收到它时会整体校验，
+    有任何问题就整份拒绝、继续跑旧配置，所以下发失败不会影响线上。
+  </p>
+  <pre class="code"><code>{{.Caddyfile}}</code></pre>
+</section>
+
+<section class="panel">
+  <h2>历史版本</h2>
+  {{if .Versions}}
+  <p class="hint hint-block">
+    改崩了不用 SSH 上服务器翻配置文件，在这里点一下就回去了。
+  </p>
+  <div class="table-scroll">
+  <table class="table">
+    <thead>
+      <tr><th>版本</th><th>时间</th><th>操作</th><th>结果</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{range .Versions}}
+      <tr>
+        <td class="mono">#{{.ID}}</td>
+        <td class="nowrap">{{fmtTime .CreatedAt}}<br><span class="muted small">{{since .CreatedAt}}</span></td>
+        <td>{{.Reason}}</td>
+        <td>
+          {{if .OK}}
+            <span class="tag tag-ok">已生效</span>
+          {{else}}
+            <span class="tag tag-err">被拒绝</span>
+          {{end}}
+        </td>
+        <td class="right">
+          {{if .OK}}
+          <form method="post" action="/config/rollback/{{.ID}}"
+                data-confirm="确定把 Caddy 回滚到版本 #{{.ID}} 吗？">
+            <input type="hidden" name="csrf" value="{{$.CSRF}}">
+            <button type="submit" class="btn btn-sm">回滚到这里</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{if not .OK}}{{with .Detail}}
+      <tr class="detail-row">
+        <td></td>
+        <td colspan="4"><pre class="err-detail">{{.}}</pre></td>
+      </tr>
+      {{end}}{{end}}
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}
+  <p class="muted">还没有下发过配置。</p>
+  {{end}}
+</section>
+{{end}}

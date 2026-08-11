@@ -1,0 +1,6 @@
+# 统一用 LF。shell 脚本带 CRLF 在 Linux 上会报 /usr/bin/env^M: 没有那个文件。
+* text=auto eol=lf
+*.sh text eol=lf
+*.service text eol=lf
+Caddyfile text eol=lf
+*.exe binary

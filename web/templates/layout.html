@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{template "title" .}} · Relay</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css?v={{.Version}}">
+</head>
+<body>
+
+{{if .User}}
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="/sites">Relay</a>
+    <nav class="nav">
+      <a href="/sites" class="{{if hasPrefix .Path "/sites"}}active{{end}}">站点</a>
+      <a href="/config" class="{{if hasPrefix .Path "/config"}}active{{end}}">配置</a>
+      <a href="/settings" class="{{if hasPrefix .Path "/settings"}}active{{end}}">设置</a>
+    </nav>
+    <form method="post" action="/logout" class="topbar-logout">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <span class="who">{{.User.Username}}</span>
+      <button type="submit" class="btn btn-ghost btn-sm">退出</button>
+    </form>
+  </div>
+</header>
+{{end}}
+
+<main class="wrap main{{if not .User}} main-centered{{end}}">
+  {{with .Flash}}
+  <div class="flash flash-{{.Kind}}" role="status">{{.Message}}</div>
+  {{end}}
+  {{template "content" .}}
+</main>
+
+<footer class="wrap footer">
+  <span>Relay {{.Version}}</span>
+  <span class="dot">·</span>
+  <span>超轻量反向代理面板</span>
+</footer>
+
+<script src="/static/app.js?v={{.Version}}" defer></script>
+</body>
+</html>

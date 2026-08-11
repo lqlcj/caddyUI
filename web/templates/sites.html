@@ -1,0 +1,82 @@
+{{define "title"}}站点{{end}}
+
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>站点</h1>
+    <p class="page-sub">把域名转发到本机或内网的服务</p>
+  </div>
+  <a href="/sites/new" class="btn btn-primary">添加站点</a>
+</div>
+
+{{if not .Status.Connected}}
+<div class="banner banner-err">
+  <strong>Caddy 未连接</strong>
+  <p>{{.Status.Error}}</p>
+  <p class="mono small">{{.Status.Addr}}</p>
+  <p>面板仍然可以正常编辑，但改动不会生效。请确认 Caddy 进程正在运行。</p>
+</div>
+{{end}}
+
+{{if .Sites}}
+<div class="cards">
+  {{range .Sites}}
+  <article class="card{{if not .Enabled}} card-off{{end}}">
+    <div class="card-body">
+      <div class="domains">
+        {{range .Links}}
+          {{if .Linkable}}
+          <a class="domain" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Domain}}</a>
+          {{else}}
+          <span class="domain domain-plain">{{.Domain}}</span>
+          {{end}}
+        {{end}}
+      </div>
+
+      <div class="route">
+        {{if .HTTPS}}
+          <span class="tag tag-https">HTTPS</span>
+        {{else}}
+          <span class="tag tag-http">HTTP</span>
+        {{end}}
+        <span class="arrow" aria-hidden="true">&rarr;</span>
+        <code class="upstream">{{.UpstreamURL}}</code>
+        {{if .HasBasicAuth}}<span class="tag tag-lock">访问密码</span>{{end}}
+        {{if .SkipTLSVerify}}<span class="tag tag-warn">跳过证书校验</span>{{end}}
+        {{if .Advanced}}<span class="tag tag-adv">自定义配置</span>{{end}}
+      </div>
+
+      {{with .Note}}<p class="note">{{.}}</p>{{end}}
+    </div>
+
+    <div class="card-side">
+      <span class="state {{if .Enabled}}state-on{{else}}state-off{{end}}">
+        {{if .Enabled}}运行中{{else}}已停用{{end}}
+      </span>
+      <div class="card-actions">
+        <a href="/sites/{{.ID}}/edit" class="btn btn-sm">编辑</a>
+        <form method="post" action="/sites/{{.ID}}/toggle">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit" class="btn btn-sm">{{if .Enabled}}停用{{else}}启用{{end}}</button>
+        </form>
+        <form method="post" action="/sites/{{.ID}}/delete"
+              data-confirm="确定删除站点「{{.PrimaryDomain}}」吗？此操作无法撤销。">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit" class="btn btn-sm btn-danger">删除</button>
+        </form>
+      </div>
+    </div>
+  </article>
+  {{end}}
+</div>
+{{else}}
+<div class="empty">
+  <h2>还没有任何站点</h2>
+  <p>
+    把域名解析到这台服务器，然后在这里添加一条转发规则。<br>
+    Relay 会自动申请并续期 HTTPS 证书，你不需要碰任何证书文件。
+  </p>
+  <a href="/sites/new" class="btn btn-primary btn-lg">添加第一个站点</a>
+</div>
+{{end}}
+{{end}}

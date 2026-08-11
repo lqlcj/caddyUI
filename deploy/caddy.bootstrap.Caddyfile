@@ -1,0 +1,15 @@
+# Caddy 的引导配置 —— 只在 Caddy 全新启动、还没被 Relay 下发过配置时用一次。
+#
+# 它只做一件事：把 Admin API 打开在面板能连上的地址。之后面板会通过
+# POST /load 接管全部配置，这个文件就不再被读取了。
+#
+# 注意 systemd 单元里用的是 `caddy run --resume`：Caddy 会优先加载上次自动保存
+# 的配置（autosave.json），只有在从来没有过配置时才回退到这个文件。这样即使
+# 面板和数据库全丢了，反代也能自己起来。
+
+{
+	# 生产环境推荐 unix socket，比监听回环端口更严实：
+	#   admin unix//run/caddy/admin.sock
+	# 本地调试用 TCP 更方便（Windows 上也能跑）：
+	admin 127.0.0.1:2019
+}

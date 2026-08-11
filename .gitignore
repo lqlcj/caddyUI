@@ -1,0 +1,19 @@
+# 编译产物
+/relay
+/relay.exe
+/caddy
+/caddy.exe
+/deploy/relay
+/deploy/relay-*
+
+# 运行时数据
+/data/
+/testdata/
+*.db
+*.db-wal
+*.db-shm
+
+# 临时文件
+*.zip
+*.tar.gz
+/caddy_tmp/

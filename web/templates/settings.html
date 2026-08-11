@@ -1,0 +1,105 @@
+{{define "title"}}设置{{end}}
+
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>设置</h1>
+  </div>
+</div>
+
+<section class="panel">
+  <h2>Caddy 连接</h2>
+  <div class="kv">
+    <div class="kv-row">
+      <span class="k">Admin 地址</span>
+      <span class="v mono">{{.Status.Addr}}</span>
+    </div>
+    <div class="kv-row">
+      <span class="k">状态</span>
+      <span class="v">
+        {{if .Status.Connected}}
+          <span class="tag tag-ok">已连接</span>
+        {{else}}
+          <span class="tag tag-err">未连接</span>
+          <span class="muted">{{.Status.Error}}</span>
+        {{end}}
+      </span>
+    </div>
+  </div>
+  <p class="hint hint-block">
+    这个地址由启动参数 <code>-caddy</code> 或环境变量 <code>RELAY_CADDY_ADMIN</code> 决定，
+    改动后需要重启面板。生产环境建议用 unix socket，例如
+    <code>unix//run/caddy/admin.sock</code>。
+  </p>
+</section>
+
+<section class="panel">
+  <h2>证书</h2>
+  <form method="post" action="/settings/acme" class="form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+
+    <label class="field">
+      <span class="label">联系邮箱</span>
+      <input type="email" name="acme_email" value="{{.ACMEEmail}}" placeholder="you@example.com">
+      <span class="hint">证书续期失败时 Let's Encrypt 会往这里发提醒邮件，强烈建议填一个。</span>
+    </label>
+
+    <details class="advanced"{{if .ACMECA}} open{{end}}>
+      <summary>高级选项<span class="summary-hint">一般不用动</span></summary>
+      <div class="advanced-body">
+        <label class="field">
+          <span class="label">自定义 ACME 目录</span>
+          <input type="text" name="acme_ca" value="{{.ACMECA}}" class="mono" spellcheck="false"
+                 placeholder="留空使用 Let's Encrypt，失败自动切换 ZeroSSL">
+          <span class="hint">
+            调试证书流程时可以填 Let's Encrypt 的测试环境，避免撞正式环境的速率限制：<br>
+            <code>https://acme-staging-v02.api.letsencrypt.org/directory</code><br>
+            测试签出来的证书浏览器不认，调完记得清空。
+          </span>
+        </label>
+      </div>
+    </details>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>修改密码</h2>
+  <form method="post" action="/settings/password" class="form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+
+    <label class="field">
+      <span class="label">当前密码</span>
+      <input type="password" name="old_password" required autocomplete="current-password">
+    </label>
+    <label class="field">
+      <span class="label">新密码</span>
+      <input type="password" name="new_password" required minlength="8" autocomplete="new-password">
+    </label>
+    <label class="field">
+      <span class="label">确认新密码</span>
+      <input type="password" name="confirm_password" required minlength="8" autocomplete="new-password">
+    </label>
+
+    <p class="hint hint-block">修改后所有登录会话都会失效，需要用新密码重新登录。</p>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">修改密码</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel panel-quiet">
+  <h2>备份提醒</h2>
+  <p class="hint hint-block">
+    要完整备份，需要两样东西：<br>
+    1. 面板数据库 <code>data/relay.db</code>（站点列表、账号、配置历史）<br>
+    2. <strong>Caddy 的数据目录</strong>，里面是所有已签发的证书和 ACME 账户密钥。
+    Linux 上通常在 <code>/var/lib/caddy/.local/share/caddy</code>。<br>
+    第 2 项特别容易被忽略——丢了会导致重装后要重新签发全部证书，
+    而 Let's Encrypt 对同一组域名有每周 5 张的速率限制，撞上就得等几天。
+  </p>
+</section>
+{{end}}

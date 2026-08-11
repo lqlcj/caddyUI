@@ -1,0 +1,109 @@
+{{define "title"}}{{.Title}}{{end}}
+
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>{{.Title}}</h1>
+    <p class="page-sub">常用场景只要填上面两项，其余保持默认即可</p>
+  </div>
+</div>
+
+{{with .Error}}<div class="flash flash-err">{{.}}</div>{{end}}
+
+<form method="post" action="{{.Action}}" class="form panel">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+
+  <label class="field">
+    <span class="label">域名 <span class="req">*</span></span>
+    <textarea name="domains" rows="2" required autofocus spellcheck="false"
+              placeholder="example.com&#10;www.example.com">{{.DomainsText}}</textarea>
+    <span class="hint">一行一个，可以填多个。域名需要提前解析到这台服务器的 IP。</span>
+  </label>
+
+  <div class="field">
+    <span class="label">转发到 <span class="req">*</span></span>
+    <div class="upstream">
+      <select name="upstream_scheme" aria-label="上游协议">
+        <option value="http"{{if eq .Site.UpstreamScheme "http"}} selected{{end}}>http://</option>
+        <option value="https"{{if eq .Site.UpstreamScheme "https"}} selected{{end}}>https://</option>
+      </select>
+      <input type="text" name="upstream_host" value="{{.Site.UpstreamHost}}" required
+             placeholder="127.0.0.1" spellcheck="false" aria-label="上游地址">
+      <span class="sep" aria-hidden="true">:</span>
+      <input type="text" name="upstream_port" class="port" inputmode="numeric"
+             value="{{if .Site.UpstreamPort}}{{.Site.UpstreamPort}}{{end}}"
+             placeholder="8080" aria-label="上游端口">
+    </div>
+    <span class="hint">
+      服务跑在本机就填 <code>127.0.0.1</code>。
+      直接粘贴 <code>http://127.0.0.1:8080</code> 也认，会自动拆开。
+    </span>
+  </div>
+
+  <label class="switch">
+    <input type="checkbox" name="https"{{if .Site.HTTPS}} checked{{end}}>
+    <span class="switch-text">
+      <strong>启用 HTTPS</strong>
+      <small>自动申请证书并永久续期，不用管。需要 80 和 443 端口能被外网访问。</small>
+    </span>
+  </label>
+
+  <details class="advanced"{{if or .Site.Advanced .Site.HasBasicAuth}} open{{end}}>
+    <summary>高级选项<span class="summary-hint">一般不用动</span></summary>
+    <div class="advanced-body">
+
+      <label class="switch">
+        <input type="checkbox" name="force_https"{{if .Site.ForceHTTPS}} checked{{end}}>
+        <span class="switch-text">
+          <strong>强制跳转 HTTPS</strong>
+          <small>http 访问自动 301 跳到 https。关掉则两种协议都能直接访问。</small>
+        </span>
+      </label>
+
+      <label class="switch">
+        <input type="checkbox" name="skip_tls_verify"{{if .Site.SkipTLSVerify}} checked{{end}}>
+        <span class="switch-text">
+          <strong>忽略上游证书错误</strong>
+          <small>只有当上游是 https 且用的自签证书时才需要打开。</small>
+        </span>
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span class="label">访问密码 · 用户名</span>
+          <input type="text" name="basic_user" value="{{.Site.BasicUser}}"
+                 autocomplete="off" spellcheck="false" placeholder="留空表示不设密码">
+        </label>
+        <label class="field">
+          <span class="label">访问密码 · 密码</span>
+          <input type="password" name="basic_pass" autocomplete="new-password"
+                 placeholder="{{if .Site.HasBasicAuth}}留空表示不修改{{else}}至少 4 位{{end}}">
+        </label>
+      </div>
+      <p class="hint hint-block">设置之后，访问这个站点会先弹出浏览器自带的账号密码框。</p>
+
+      <label class="field">
+        <span class="label">备注</span>
+        <input type="text" name="note" value="{{.Site.Note}}" maxlength="200"
+               placeholder="给自己看的说明，会写成配置文件里的注释">
+      </label>
+
+      <label class="field">
+        <span class="label">自定义 Caddyfile 片段</span>
+        <textarea name="advanced" rows="5" class="mono" spellcheck="false"
+                  placeholder="encode gzip&#10;header X-Frame-Options SAMEORIGIN">{{.Site.Advanced}}</textarea>
+        <span class="hint">
+          原样插入这个站点的配置块内部。写错了 Caddy 会整体拒绝这份配置，
+          线上仍然跑旧的，不会把网站搞挂。
+        </span>
+      </label>
+
+    </div>
+  </details>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">保存并生效</button>
+    <a href="/sites" class="btn">取消</a>
+  </div>
+</form>
+{{end}}

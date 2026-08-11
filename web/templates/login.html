@@ -1,0 +1,25 @@
+{{define "title"}}登录{{end}}
+
+{{define "content"}}
+<div class="auth-card">
+  <h1 class="auth-title">Relay</h1>
+  <p class="auth-sub">登录管理面板</p>
+
+  {{with .Error}}<div class="flash flash-err">{{.}}</div>{{end}}
+
+  <form method="post" action="/login" class="form">
+    <label class="field">
+      <span class="label">用户名</span>
+      <input type="text" name="username" value="{{.Username}}" required autofocus
+             autocomplete="username">
+    </label>
+
+    <label class="field">
+      <span class="label">密码</span>
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+
+    <button type="submit" class="btn btn-primary btn-block">登录</button>
+  </form>
+</div>
+{{end}}
