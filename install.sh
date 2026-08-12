@@ -2,7 +2,7 @@
 #
 # CaddyUI 一键安装脚本（Linux + systemd）
 #
-#   curl -fsSL https://raw.githubusercontent.com/lqlcj/caddyUI/main/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/lqlcj/CaddyUI/main/install.sh | sudo bash
 #
 # 做这几件事：
 #   1. 建 caddy 系统用户（面板和 Caddy 共用，省掉 socket 权限的麻烦）
@@ -21,7 +21,7 @@
 
 set -euo pipefail
 
-REPO="lqlcj/caddyUI"
+REPO="lqlcj/CaddyUI"
 REF="${CADDYUI_REF:-${RELAY_REF:-main}}"
 RAW="https://raw.githubusercontent.com/${REPO}/${REF}"
 

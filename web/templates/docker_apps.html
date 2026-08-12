@@ -13,19 +13,26 @@
   </div>
 </div>
 
+{{with .EngineJob}}
+  {{if .Running}}<div class="banner banner-ok"><strong>{{.Action}}</strong><p>正在从 Docker 官方仓库处理软件包。Docker 服务和容器可能短暂重启，请稍后刷新。</p></div>
+  {{else if eq (printf "%s" .State) "failed"}}<div class="banner banner-err"><strong>{{.Action}}失败</strong><p>{{.Error}}</p>{{with .Output}}<details class="job-output"><summary>查看详细输出</summary><pre class="code">{{.}}</pre></details>{{end}}</div>
+  {{else if eq (printf "%s" .State) "ok"}}<div class="banner banner-ok"><strong>{{.Action}}完成</strong><p>上方版本号刷新后会显示当前版本。</p>{{with .Output}}<details class="job-output"><summary>查看输出</summary><pre class="code">{{.}}</pre></details>{{end}}</div>{{end}}
+{{end}}
+
+{{with .UninstallJob}}
+  {{if .Running}}<div class="banner banner-ok"><strong>{{.Action}}</strong><p>正在删除容器、网络、Compose 卷、本地构建镜像和项目目录。</p></div>
+  {{else if eq (printf "%s" .State) "failed"}}<div class="banner banner-err"><strong>{{.Action}}失败</strong><p>{{.Error}}</p>{{with .Output}}<details class="job-output"><summary>查看详细输出</summary><pre class="code">{{.}}</pre></details>{{end}}</div>
+  {{else if eq (printf "%s" .State) "ok"}}<div class="banner banner-ok"><strong>{{.Action}}完成</strong><p>应用数据已按卸载确认永久删除；共享镜像仍可在镜像管理中清理。</p>{{end}}
+{{end}}
+
 {{if not .Docker.Available}}
 <div class="banner banner-err">
   <strong>Docker 管理暂不可用</strong>
   <p>{{if .Docker.Error}}{{.Docker.Error}}{{else}}Docker 助手没有运行。重新执行一键安装脚本可自动安装或修复。{{end}}</p>
   {{with .Docker.AppsRoot}}<p class="mono small">应用目录：{{.}}</p>{{end}}
 </div>
-{{with .EngineJob}}
-  {{if .Running}}<div class="banner banner-ok"><strong>{{.Action}}</strong><p>正在下载和启动 Docker，刷新页面查看结果。</p></div>
-  {{else if eq (printf "%s" .State) "failed"}}<div class="banner banner-err"><strong>{{.Action}}失败</strong><p>{{.Error}}</p>{{with .Output}}<pre class="code">{{.}}</pre>{{end}}</div>
-  {{else if eq (printf "%s" .State) "ok"}}<div class="banner banner-ok"><strong>Docker 已安装或修复完成</strong><p>如果上方仍显示不可用，请等待几秒后再刷新。</p></div>{{end}}
-{{end}}
 {{if .InstallerAvailable}}
-<form method="post" action="/docker/engine/install" class="docker-install-action" data-confirm="从 Docker 官方仓库安装或修复 Docker Engine 和 Compose？">
+<form method="post" action="/docker/engine/install" class="docker-install-action" data-confirm="从 Docker 官方仓库安装或修复 Docker Engine 和 Compose？&#10;&#10;安装期间 Docker 服务和容器可能短暂重启。">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
   <button type="submit" class="btn btn-primary"{{if .EngineBusy}} disabled{{end}}>一键安装 / 修复 Docker</button>
 </form>
@@ -35,11 +42,17 @@
   <span><strong>Docker</strong> <code>{{.Docker.DockerVersion}}</code></span>
   <span><strong>Compose</strong> <code>{{.Docker.ComposeVersion}}</code></span>
   <span class="muted small">应用配置保存在 {{.Docker.AppsRoot}}</span>
+  {{if .InstallerAvailable}}
+  <form method="post" action="/docker/engine/update" class="docker-update-action" data-confirm="从 Docker 官方仓库更新 Docker Engine、CLI、containerd、Buildx 和 Compose 插件？&#10;&#10;更新期间 Docker 服务及全部容器可能短暂重启。">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button type="submit" class="btn btn-sm"{{if .EngineBusy}} disabled{{end}}>更新 Docker / Compose</button>
+  </form>
+  {{else}}{{with .InstallerBlocked}}<span class="hint">{{.}}</span>{{end}}{{end}}
 </div>
 {{end}}
 
 {{with .ActiveJob}}
-  {{if ne .Key "@engine"}}<div class="banner banner-ok"><strong>{{.Action}}</strong><p>Docker 正在后台处理任务，完成前其它写操作会暂时禁用。</p></div>{{end}}
+  {{if and (ne .Key "@engine") (ne .Key "@uninstall")}}<div class="banner banner-ok"><strong>{{.Action}}</strong><p>Docker 正在后台处理任务，完成前其它写操作会暂时禁用。</p></div>{{end}}
 {{end}}
 
 {{if .Cards}}

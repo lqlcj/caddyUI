@@ -27,6 +27,87 @@ func TestAnalyzeAndApplyPortChanges(t *testing.T) {
 	}
 }
 
+func TestAnalyzeAndApplyLoopbackPortBinding(t *testing.T) {
+	compose := `services:
+  app:
+    image: demo:latest
+    ports:
+      - '127.0.0.1:16688:16688'
+`
+	hints := Analyze(compose, "")
+	if len(hints.Ports) != 1 || hints.Ports[0].Listen != "127.0.0.1:16688" || hints.Ports[0].Target != "16688" {
+		t.Fatalf("unexpected loopback port hint: %#v", hints.Ports)
+	}
+	updated, err := ApplyPortChanges(compose, map[string]string{"app:0": "127.0.0.1:17777"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(updated, "127.0.0.1:17777:16688") {
+		t.Fatalf("updated compose did not preserve loopback binding:\n%s", updated)
+	}
+	updated, err = ApplyPortChanges(updated, map[string]string{"app:0": "18888"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(updated, "127.0.0.1") || !strings.Contains(updated, "18888:16688") {
+		t.Fatalf("updated compose did not remove host binding:\n%s", updated)
+	}
+}
+
+func TestApplyLongPortBinding(t *testing.T) {
+	compose := `services:
+  app:
+    image: demo:latest
+    ports:
+      - target: 80
+        published: "8080"
+        protocol: tcp
+`
+	updated, err := ApplyPortChanges(compose, map[string]string{"app:0": "127.0.0.1:18080"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(updated, "host_ip: 127.0.0.1") || !strings.Contains(updated, `published: "18080"`) {
+		t.Fatalf("long syntax was not updated:\n%s", updated)
+	}
+}
+
+func TestApplyIPv6LoopbackPortBinding(t *testing.T) {
+	compose := `services:
+  app:
+    image: demo:latest
+    ports:
+      - '[::1]:8080:80'
+`
+	hints := Analyze(compose, "")
+	if len(hints.Ports) != 1 || hints.Ports[0].Listen != "[::1]:8080" {
+		t.Fatalf("unexpected IPv6 port hint: %#v", hints.Ports)
+	}
+	updated, err := ApplyPortChanges(compose, map[string]string{"app:0": "[::1]:18080"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(updated, "[::1]:18080:80") {
+		t.Fatalf("IPv6 binding was not updated:\n%s", updated)
+	}
+}
+
+func TestApplyPortBindingAcceptsDisplayedProtocolSuffix(t *testing.T) {
+	compose := `services:
+  dns:
+    image: demo:latest
+    ports:
+      - '127.0.0.1:5353:53/udp'
+`
+	updated, err := ApplyPortChanges(compose, map[string]string{"dns:0": "127.0.0.1:5533/udp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(updated, "127.0.0.1:5533:53/udp") {
+		t.Fatalf("UDP binding was not updated:\n%s", updated)
+	}
+}
+
 func TestAnalyzeAndApplyComposeEnvironment(t *testing.T) {
 	compose := `services:
   app:

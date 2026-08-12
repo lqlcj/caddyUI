@@ -26,7 +26,7 @@ Caddy 会用自己保存的配置继续工作。
 Linux + systemd，root 执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lqlcj/caddyUI/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/lqlcj/CaddyUI/main/install.sh | sudo bash
 ```
 
 装完屏幕上会打出面板地址，形如 `http://服务器IP:81`。第一次打开会让你**用邮箱**
@@ -54,7 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/lqlcj/caddyUI/main/install.sh | sud
 ## 一键卸载
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lqlcj/caddyUI/main/uninstall.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/lqlcj/CaddyUI/main/uninstall.sh | sudo bash
 ```
 
 停掉并删除 CaddyUI、Caddy、systemd 单元、数据库和证书。执行前有 5 秒倒计时，
@@ -118,19 +118,24 @@ Dockge / Portainer 面板。面向不会写命令的使用方式：
 3. 密码仍是 `change-me` 这类占位值时自动生成强密码
 4. 点击一次开始安装，后台拉取/构建镜像并启动容器
 
-安装后可以启动、停止、重启、看最近日志、编辑配置、拉取新镜像并重新部署、卸载，
+安装后可以启动、停止、重启、看最近日志、编辑配置、拉取新镜像并重新部署、彻底卸载，
 还有独立的镜像列表、手动拉取、删除和清理悬空镜像页面。服务器尚未安装 Docker 时，
 页面会提供“一键安装 / 修复 Docker”，目前支持 Debian、Ubuntu、CentOS、RHEL、
 Rocky Linux、AlmaLinux 和 Fedora。
 Raspberry Pi OS 也会使用 Docker 官方 Debian 仓库安装。
 
+Docker 页面会显示 Engine 和 Compose 版本，并可一键从 Docker 官方软件仓库更新
+Engine、CLI、containerd、Buildx 和 Compose 插件。更新过程中 Docker 服务和容器可能
+短暂重启。
+
 GitHub 导入会下载整个公开仓库，所以项目依赖仓库里的 Dockerfile、脚本和配置文件时
 也能工作。私有仓库暂不支持；特别复杂、需要人工执行安装脚本的项目仍可能需要看日志
 调整完整 Compose 配置。
 
-从面板卸载应用时只移除容器和网络：命名卷不会删除，项目目录会移动到
-`/var/lib/caddyui/docker-archive`，包括可能保存在 `./data` 中的业务数据，避免误点
-一次就永久丢数据。
+从面板确认“彻底卸载”后，会删除该应用的容器、网络、Compose 创建的卷、项目本地
+构建镜像和整个项目目录，包括可能保存在 `./data` 中的业务数据。外部共享卷以及项目
+目录之外的绝对 bind mount 不会删除。明确引用的公共镜像可能被其它应用共用，会留在
+镜像列表供用户按需清理。这个操作无法撤销，确认框会明确列出删除范围。
 
 > Docker/Compose 本身拥有接近宿主机 root 的能力。只安装你信任的项目，不要把面板账号
 > 分享给不可信的人。CaddyUI Web 进程没有直接访问 Docker socket；固定操作由独立的

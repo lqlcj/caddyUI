@@ -2,7 +2,7 @@
 #
 # CaddyUI 一键卸载脚本
 #
-#   curl -fsSL https://raw.githubusercontent.com/lqlcj/caddyUI/main/uninstall.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/lqlcj/CaddyUI/main/uninstall.sh | sudo bash
 #
 # 默认把 CaddyUI、Caddy、以及它们的数据全部删掉，包括已经申请下来的 HTTPS 证书。
 # 想留着数据和证书（比如只是想重装）：

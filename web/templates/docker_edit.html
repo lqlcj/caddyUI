@@ -15,7 +15,7 @@
 </div>
 {{with .Error}}<div class="flash flash-err">{{.}}</div>{{end}}
 
-<form method="post" action="{{.Action}}" class="form panel">
+<form method="post" action="{{.Action}}" class="form panel" data-docker-editor data-docker-heavy-page>
   <input type="hidden" name="csrf" value="{{.CSRF}}">
   <input type="hidden" name="source_url" value="{{.Draft.Source.URL}}">
   <input type="hidden" name="source_owner" value="{{.Draft.Source.Owner}}">
@@ -37,16 +37,15 @@
 
   {{if .Hints.Ports}}
   <section class="easy-settings">
-    <h2>访问端口</h2>
-    <p class="hint hint-block">通常只需要避免与服务器现有端口冲突。容器内部端口不要改。</p>
-    <div class="settings-grid">
+    <h2>访问地址</h2>
+    <p class="hint hint-block">只填端口会对外开放；填 <code>127.0.0.1:端口</code> 则仅允许本机和 Caddy 访问，更安全。</p>
+    <div class="port-settings">
       {{range .Hints.Ports}}
-      <label class="field easy-setting">
-        <span class="label">{{.Service}}：外部端口</span>
+      <label class="field port-setting">
+        <span class="label">{{.Service}} <span class="muted small">→ 容器 {{.Target}}/{{.Protocol}}</span></span>
         {{if .Simple}}
-        <input type="text" inputmode="numeric" name="{{portField .Service .Index}}" value="{{.Published}}" required>
-        <input type="hidden" name="{{portOriginalField .Service .Index}}" value="{{.Published}}">
-        <span class="hint">访问 <code>:{{.Published}}</code> → 容器内部 <code>:{{.Target}}</code>{{if .HostIP}}，绑定 {{.HostIP}}{{end}}{{if eq .HostIP "127.0.0.1"}}（只能本机/Caddy 访问，更安全）{{end}}</span>
+        <input type="text" name="{{portField .Service .Index}}" value="{{.Listen}}" placeholder="127.0.0.1:16688" spellcheck="false" required data-compose-port="{{.Service}}:{{.Index}}">
+        <input type="hidden" name="{{portOriginalField .Service .Index}}" value="{{.Listen}}" data-compose-port-original="{{.Service}}:{{.Index}}">
         {{else}}
         <input type="text" value="{{.Raw}}" disabled>
         <span class="hint">这个端口写法较复杂，请在下面的完整配置里修改。</span>
@@ -57,6 +56,13 @@
   </section>
   {{end}}
 
+  {{if or .Hints.Ports .Hints.Env .Hints.ComposeEnv}}
+  <div class="docker-sync-row">
+    <p class="hint docker-sync-status" data-compose-sync-status>修改上面的设置后，提交时会写入完整 Compose 和 .env。</p>
+    <button type="button" class="btn btn-sm" data-compose-sync hidden>同步到完整配置</button>
+  </div>
+  {{end}}
+
   {{if .Hints.Env}}
   <section class="easy-settings">
     <h2>环境变量</h2>
@@ -65,7 +71,7 @@
       {{range .Hints.Env}}
       <label class="field easy-setting">
         <span class="label">{{.Key}}</span>
-        <input type="{{if .Secret}}password{{else}}text{{end}}" name="env__{{.Key}}" value="{{.Value}}" spellcheck="false" autocomplete="off">
+        <input type="{{if .Secret}}password{{else}}text{{end}}" name="env__{{.Key}}" value="{{.Value}}" spellcheck="false" autocomplete="off" data-env-setting="{{.Key}}">
         <input type="hidden" name="envorig__{{.Key}}" value="{{if .Generated}}{{else}}{{.Value}}{{end}}">
         {{if .Generated}}<span class="hint"><span class="tag tag-ok">已自动生成强密码</span> 可直接使用，也可以改成自己的。</span>{{end}}
         {{with .Comment}}<span class="hint">{{.}}</span>{{end}}
@@ -83,7 +89,7 @@
       {{range .Hints.ComposeEnv}}
       <label class="field easy-setting">
         <span class="label">{{.Service}} · {{.Key}}</span>
-        <input type="{{if .Secret}}password{{else}}text{{end}}" name="{{composeEnvField .ServiceIndex .EntryIndex}}" value="{{.Value}}" spellcheck="false" autocomplete="off">
+        <input type="{{if .Secret}}password{{else}}text{{end}}" name="{{composeEnvField .ServiceIndex .EntryIndex}}" value="{{.Value}}" spellcheck="false" autocomplete="off" data-compose-env="{{.ServiceIndex}}:{{.EntryIndex}}">
         <input type="hidden" name="{{composeEnvOriginalField .ServiceIndex .EntryIndex}}" value="{{if .Generated}}{{else}}{{.Value}}{{end}}">
         {{if .Generated}}<span class="hint"><span class="tag tag-ok">已自动生成强密码</span> 可直接使用。</span>{{end}}
       </label>
@@ -103,7 +109,8 @@
     <summary>完整 Compose 配置 <span class="summary-hint">高级设置，看不懂可以不改</span></summary>
     <div class="advanced-body">
       <label class="field">
-        <textarea name="compose" rows="22" class="mono compose-editor" required spellcheck="false">{{.Draft.Compose}}</textarea>
+        <textarea name="compose" rows="22" class="mono compose-editor" required spellcheck="false" data-compose-editor data-release-text>{{.Draft.Compose}}</textarea>
+        <span class="hint">较小的配置会自动同步；配置较大时会显示手动同步按钮。即使不点按钮，提交时服务器也会应用上面的常用设置。</span>
         <span class="hint">安装前会运行 <code>docker compose config</code> 检查。这里允许项目使用 volumes、privileged 等完整 Compose 能力，只安装你信任的项目。</span>
       </label>
     </div>
@@ -113,7 +120,7 @@
     <summary>.env 环境变量文件 <span class="summary-hint">密码和可修改参数常在这里</span></summary>
     <div class="advanced-body">
       <label class="field">
-        <textarea name="env" rows="12" class="mono" spellcheck="false" placeholder="TZ=Asia/Shanghai&#10;APP_PASSWORD=请修改">{{.Draft.Env}}</textarea>
+        <textarea name="env" rows="12" class="mono" spellcheck="false" placeholder="TZ=Asia/Shanghai&#10;APP_PASSWORD=请修改" data-env-editor data-release-text>{{.Draft.Env}}</textarea>
       </label>
     </div>
   </details>

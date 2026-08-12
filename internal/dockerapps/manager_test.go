@@ -3,6 +3,7 @@ package dockerapps
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -203,5 +204,49 @@ func TestStartJobBlocksFileMutationUntilJobFinishes(t *testing.T) {
 	}
 	if m.Busy() {
 		t.Fatal("background job did not release the global lock")
+	}
+}
+
+func TestJobsPruneExpiredAndKeepRunning(t *testing.T) {
+	m := New(t.TempDir(), filepath.Join(t.TempDir(), "missing.sock"))
+	now := time.Now()
+	m.jobs["expired"] = Job{Key: "expired", State: JobOK, StartedAt: now.Add(-48 * time.Hour), FinishedAt: now.Add(-25 * time.Hour)}
+	m.jobs["recent"] = Job{Key: "recent", State: JobOK, StartedAt: now.Add(-time.Hour), FinishedAt: now.Add(-time.Hour)}
+	m.jobs["running"] = Job{Key: "running", State: JobRunning, StartedAt: now.Add(-48 * time.Hour)}
+
+	m.jobsMu.Lock()
+	m.pruneJobsLocked(now)
+	m.jobsMu.Unlock()
+
+	if m.Job("expired") != nil {
+		t.Fatal("expired completed job should be removed")
+	}
+	if m.Job("recent") == nil || m.Job("running") == nil {
+		t.Fatal("recent and running jobs should be retained")
+	}
+}
+
+func TestJobsStayWithinRetentionLimit(t *testing.T) {
+	m := New(t.TempDir(), filepath.Join(t.TempDir(), "missing.sock"))
+	now := time.Now()
+	for i := 0; i < maxRetainedJobs+10; i++ {
+		key := fmt.Sprintf("job-%02d", i)
+		finished := now.Add(time.Duration(i) * time.Minute)
+		m.jobs[key] = Job{Key: key, State: JobOK, StartedAt: finished.Add(-time.Minute), FinishedAt: finished}
+	}
+	m.jobs["running"] = Job{Key: "running", State: JobRunning, StartedAt: now}
+
+	m.jobsMu.Lock()
+	m.pruneJobsLocked(now.Add(2 * time.Hour))
+	m.jobsMu.Unlock()
+
+	if len(m.Jobs()) != maxRetainedJobs {
+		t.Fatalf("retained jobs = %d, want %d", len(m.Jobs()), maxRetainedJobs)
+	}
+	if m.Job("running") == nil {
+		t.Fatal("running job should never be pruned")
+	}
+	if m.Job("job-00") != nil {
+		t.Fatal("oldest completed job should be pruned first")
 	}
 }

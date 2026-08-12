@@ -1,6 +1,7 @@
 {{define "title"}}{{.App.Title}}{{end}}
 
 {{define "content"}}
+<div data-docker-heavy-page>
 <div class="page-head">
   <div>
     <h1>{{.App.Title}}</h1>
@@ -14,9 +15,9 @@
   {{if .Running}}
   <div class="banner banner-ok"><strong>{{.Action}}</strong><p>操作在后台进行，通常需要几秒到几分钟。刷新本页查看结果。</p></div>
   {{else if eq (printf "%s" .State) "ok"}}
-  <div class="banner banner-ok"><strong>{{.Action}}完成</strong>{{with .Output}}<details class="job-output"><summary>查看输出</summary><pre class="code">{{.}}</pre></details>{{end}}</div>
+  <div class="banner banner-ok"><strong>{{.Action}}完成</strong>{{with .Output}}<details class="job-output"><summary>查看输出</summary><pre class="code" data-release-text>{{.}}</pre></details>{{end}}</div>
   {{else if eq (printf "%s" .State) "failed"}}
-  <div class="banner banner-err"><strong>{{.Action}}失败</strong><p>{{.Error}}</p>{{with .Output}}<details class="job-output"><summary>查看详细输出</summary><pre class="code">{{.}}</pre></details>{{end}}</div>
+  <div class="banner banner-err"><strong>{{.Action}}失败</strong><p>{{.Error}}</p>{{with .Output}}<details class="job-output"><summary>查看详细输出</summary><pre class="code" data-release-text>{{.}}</pre></details>{{end}}</div>
   {{end}}
 {{end}}
 
@@ -48,22 +49,32 @@
   </div>
 </section>
 
-<section class="panel">
-  <div class="section-head"><h2>最近日志</h2><span class="muted small">最后 300 行，刷新页面更新</span></div>
-  {{with .LogsError}}<p class="err-text">{{.}}</p>{{end}}
-  {{if .Logs}}<pre class="code docker-logs">{{.Logs}}</pre>{{else}}<p class="muted">暂无日志。</p>{{end}}
+<section class="panel" data-lazy-text data-lazy-text-url="/docker/apps/{{.App.Name}}/logs" data-lazy-text-name="日志">
+  <div class="section-head">
+    <div><h2>最近日志</h2><span class="muted small">最后 300 行，按需加载，最多显示 256 KB</span></div>
+    <a href="/docker/apps/{{.App.Name}}/logs" target="_blank" rel="noopener noreferrer" class="btn btn-sm" data-lazy-text-load>加载日志</a>
+  </div>
+  <p class="muted" data-lazy-text-status aria-live="polite">为减少页面内存，日志不会随页面一起加载。</p>
+  <pre class="code docker-logs" data-lazy-text-output data-release-text hidden></pre>
 </section>
 
-<details class="advanced panel-like">
+<details class="advanced panel-like" data-lazy-text data-lazy-text-url="/docker/apps/{{.App.Name}}/compose" data-lazy-text-name="Compose">
   <summary>查看当前 Compose 配置</summary>
-  <div class="advanced-body">{{with .ComposeError}}<p class="err-text">{{.}}</p>{{end}}<pre class="code">{{.Compose}}</pre></div>
+  <div class="advanced-body">
+    <div class="lazy-text-actions">
+      <p class="muted" data-lazy-text-status aria-live="polite">展开后才读取配置，避免首屏占用大内存。</p>
+      <a href="/docker/apps/{{.App.Name}}/compose" target="_blank" rel="noopener noreferrer" class="btn btn-sm" data-lazy-text-load>加载 Compose</a>
+    </div>
+    <pre class="code" data-lazy-text-output data-release-text hidden></pre>
+  </div>
 </details>
 
 <section class="panel danger-zone">
   <h2>卸载应用</h2>
-  <p class="hint hint-block">会停止并移除这个应用的容器和网络。命名卷不会删除，项目目录也会移到归档目录，因此使用 <code>./data</code> 保存的资料不会被误删。</p>
-  <form method="post" action="/docker/apps/{{.App.Name}}/delete" data-confirm="确定卸载「{{.App.Title}}」吗？&#10;&#10;容器和网络会移除；命名卷和项目文件会保留在服务器上。">
-    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="btn btn-danger"{{if .Busy}} disabled{{end}}>卸载应用</button>
+  <p class="hint hint-block">会永久删除这个应用的容器、网络、Compose 创建的卷、本地构建镜像，以及整个项目目录（包括 <code>./data</code> 等相对路径数据）。外部共享卷和项目目录之外的绝对路径不会删除；明确引用的公共镜像可能被其它应用共用，请到“镜像管理”按需删除。</p>
+  <form method="post" action="/docker/apps/{{.App.Name}}/delete" data-confirm="确定彻底卸载「{{.App.Title}}」吗？&#10;&#10;将永久删除：&#10;• 容器和网络&#10;• 该项目创建的卷与本地构建镜像&#10;• 整个项目目录及其中的业务数据&#10;&#10;共享镜像不会自动删除。此操作无法撤销。">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="btn btn-danger"{{if .Busy}} disabled{{end}}>彻底卸载并删除数据</button>
   </form>
 </section>
+</div>
 {{end}}

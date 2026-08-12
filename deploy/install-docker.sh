@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# CaddyUI 一键安装/修复 Docker 的 root 助手。
+# CaddyUI 一键安装、修复或更新 Docker 的 root 助手。
 #
 # 安全边界：脚本不接受任何参数，只安装 Docker 官方仓库中的 Engine、CLI、
 # containerd、Buildx 和 Compose 插件，然后启动固定的两个服务。面板不能指定
@@ -19,14 +19,6 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C
 unset BASH_ENV ENV CDPATH GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM PYTHONPATH PERL5LIB RUBYOPT \
   APT_CONFIG DNF_CONF YUM0 RPM_CONFIGDIR DOCKER_CONFIG CONTAINERD_NAMESPACE CONTAINERD_ADDRESS
-
-if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-  info "Docker 和 Compose 已安装，正在确保服务运行"
-  systemctl enable --now docker
-  docker version --format 'Docker {{.Server.Version}}'
-  docker compose version
-  exit 0
-fi
 
 command -v systemctl >/dev/null 2>&1 || die "系统不是 systemd，无法自动安装"
 command -v curl >/dev/null 2>&1 || die "缺少 curl"
@@ -85,8 +77,9 @@ case "${ID:-}" in
     ;;
 esac
 
-info "启动 Docker"
+info "启动或重启 Docker"
 systemctl enable --now docker
+systemctl restart docker
 docker version --format 'Docker {{.Server.Version}}'
 docker compose version
-info "安装完成"
+info "Docker Engine 和 Compose 安装 / 更新完成"

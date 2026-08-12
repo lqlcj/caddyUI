@@ -43,3 +43,33 @@ func TestValidateRefDoesNotScanContainerDataSymlinks(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRemoveAppDirRejectsRootAndRemovesValidatedApp(t *testing.T) {
+	root := t.TempDir()
+	appDir := filepath.Join(root, "demo")
+	if err := os.MkdirAll(appDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "data.txt"), []byte("delete me"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	h := NewHelperServer(filepath.Join(root, "helper.sock"), root, "")
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.AppsRoot = rootAbs
+	appAbs, err := filepath.Abs(appDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.removeAppDir(HelperAppRef{Name: "demo", AppDir: rootAbs}); err == nil {
+		t.Fatal("helper must refuse deleting the apps root")
+	}
+	if err := h.removeAppDir(HelperAppRef{Name: "demo", AppDir: appAbs}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(appAbs); !os.IsNotExist(err) {
+		t.Fatalf("app directory still exists: %v", err)
+	}
+}

@@ -15,15 +15,15 @@ import (
 // PortSetting and EnvSetting are best-effort hints for the beginner-friendly
 // editor. The raw Compose and .env text remain editable and authoritative.
 type PortSetting struct {
-	Service      string
-	Index        int
-	Raw          string
-	HostIP       string
-	Published    string
-	Target       string
-	Protocol     string
-	Simple       bool
-	SuggestedURL string
+	Service   string
+	Index     int
+	Raw       string
+	HostIP    string
+	Published string
+	Listen    string
+	Target    string
+	Protocol  string
+	Simple    bool
 }
 
 type EnvSetting struct {
@@ -214,10 +214,22 @@ func parsePortNode(service string, index int, node *yaml.Node) PortSetting {
 		}
 		h.Simple = h.Published != "" && h.Target != ""
 	}
-	if p, err := strconv.Atoi(h.Published); err == nil && p > 0 && p <= 65535 && h.Protocol == "tcp" {
-		h.SuggestedURL = fmt.Sprintf("http://服务器IP:%d", p)
+	if h.Simple {
+		h.Listen = formatPortBinding(h.HostIP, h.Published)
 	}
 	return h
+}
+
+func formatPortBinding(hostIP, published string) string {
+	hostIP = strings.TrimSpace(strings.Trim(hostIP, "[]"))
+	published = strings.TrimSpace(published)
+	if hostIP == "" {
+		return published
+	}
+	if strings.Contains(hostIP, ":") {
+		hostIP = "[" + hostIP + "]"
+	}
+	return hostIP + ":" + published
 }
 
 func splitShortPort(raw string) (published, target, hostIP, protocol string, ok bool) {
@@ -285,33 +297,23 @@ func ApplyPortChanges(compose string, changes map[string]string) (string, error)
 			if !exists {
 				continue
 			}
-			want = strings.TrimSpace(want)
-			if err := validatePublishedPort(want); err != nil {
-				return "", fmt.Errorf("服务 %s 的端口: %w", service, err)
+			hostIP, published, err := parsePortBinding(want)
+			if err != nil {
+				return "", fmt.Errorf("服务 %s 的访问地址: %w", service, err)
 			}
 			hint := parsePortNode(service, index, node)
 			if !hint.Simple {
 				continue
 			}
 			if node.Kind == yaml.ScalarNode {
-				value := ""
-				if hint.HostIP != "" {
-					host := hint.HostIP
-					if strings.Contains(host, ":") {
-						host = "[" + host + "]"
-					}
-					value = host + ":"
-				}
-				value += want + ":" + hint.Target
+				value := formatPortBinding(hostIP, published) + ":" + hint.Target
 				if hint.Protocol != "" && hint.Protocol != "tcp" {
 					value += "/" + hint.Protocol
 				}
 				node.Value = value
 			} else {
-				published := mapValue(node, "published")
-				if published != nil {
-					published.Value = want
-				}
+				setMapScalar(node, "published", published)
+				setMapScalar(node, "host_ip", hostIP)
 			}
 		}
 	}
@@ -320,6 +322,68 @@ func ApplyPortChanges(compose string, changes map[string]string) (string, error)
 		return "", err
 	}
 	return string(b), nil
+}
+
+func parsePortBinding(value string) (hostIP, published string, err error) {
+	value = strings.TrimSpace(value)
+	if base, protocol, found := strings.Cut(value, "/"); found {
+		if strings.EqualFold(strings.TrimSpace(protocol), "tcp") || strings.EqualFold(strings.TrimSpace(protocol), "udp") {
+			value = strings.TrimSpace(base)
+		}
+	}
+	if value == "" {
+		return "", "", errorsNew("请填写端口，例如 16688 或 127.0.0.1:16688")
+	}
+	if strings.HasPrefix(value, "[") {
+		end := strings.Index(value, "]")
+		if end < 0 || end+2 > len(value) || value[end+1] != ':' {
+			return "", "", errorsNew("IPv6 地址请写成 [::1]:16688")
+		}
+		hostIP, published = value[1:end], value[end+2:]
+	} else {
+		switch strings.Count(value, ":") {
+		case 0:
+			published = value
+		case 1:
+			hostIP, published, _ = strings.Cut(value, ":")
+		default:
+			return "", "", errorsNew("IPv6 地址请写成 [::1]:16688")
+		}
+	}
+	hostIP, published = strings.TrimSpace(hostIP), strings.TrimSpace(published)
+	if hostIP != "" && net.ParseIP(hostIP) == nil {
+		return "", "", errorsNew("监听地址必须是 IP，例如 127.0.0.1:16688")
+	}
+	if err := validatePublishedPort(published); err != nil {
+		return "", "", err
+	}
+	return hostIP, published, nil
+}
+
+func setMapScalar(m *yaml.Node, key, value string) {
+	if m == nil || m.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value != key {
+			continue
+		}
+		if value == "" {
+			m.Content = append(m.Content[:i], m.Content[i+2:]...)
+			return
+		}
+		m.Content[i+1].Kind = yaml.ScalarNode
+		m.Content[i+1].Tag = "!!str"
+		m.Content[i+1].Value = value
+		return
+	}
+	if value == "" {
+		return
+	}
+	m.Content = append(m.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value},
+	)
 }
 
 func validatePublishedPort(value string) error {

@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -76,7 +77,8 @@ func (s *Server) handleDockerApps(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, r, "docker_apps", map[string]any{
 		"Docker": info, "Cards": cards, "InstallerAvailable": installOK,
-		"InstallerBlocked": installWhy, "EngineJob": engineJob, "ActiveJob": activeJob, "EngineBusy": busy,
+		"InstallerBlocked": installWhy, "EngineJob": engineJob, "UninstallJob": m.Job("@uninstall"),
+		"ActiveJob": activeJob, "EngineBusy": busy,
 	})
 }
 
@@ -89,6 +91,19 @@ func (s *Server) handleDockerEngineInstall(w http.ResponseWriter, r *http.Reques
 		flashErr(w, "Docker 安装没能开始：%v", err)
 	} else {
 		flashWarn(w, "正在后台安装或修复 Docker，通常需要 1~5 分钟。请稍后刷新本页。")
+	}
+	redirect(w, r, "/docker")
+}
+
+func (s *Server) handleDockerEngineUpdate(w http.ResponseWriter, r *http.Request) {
+	m, err := s.dockerManager()
+	if err == nil {
+		err = m.StartEngineUpdate()
+	}
+	if err != nil {
+		flashErr(w, "Docker / Compose 更新没能开始：%v", err)
+	} else {
+		flashWarn(w, "正在后台更新 Docker Engine 和 Compose。Docker 服务及容器可能短暂重启，请稍后刷新本页。")
 	}
 	redirect(w, r, "/docker")
 }
@@ -147,6 +162,7 @@ func (s *Server) handleDockerImportPrepare(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) renderDockerEditor(w http.ResponseWriter, r *http.Request, app *dockerapps.App, draft dockerapps.Draft, installing bool, errMsg string) {
+	noStoreDockerPage(w)
 	hints := dockerapps.Analyze(draft.Compose, draft.Env)
 	title := "确认安装"
 	action := "/docker/install"
@@ -241,6 +257,18 @@ func draftFromDockerForm(r *http.Request) (dockerapps.Draft, error) {
 	return draft, nil
 }
 
+func (s *Server) handleDockerPreview(w http.ResponseWriter, r *http.Request) {
+	draft, err := draftFromDockerForm(r)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]string{"compose": draft.Compose, "env": draft.Env})
+}
+
 func (s *Server) handleDockerInstall(w http.ResponseWriter, r *http.Request) {
 	m, err := s.dockerManager()
 	if err != nil {
@@ -304,6 +332,7 @@ func (s *Server) dockerAppFromPath(w http.ResponseWriter, r *http.Request) (*doc
 }
 
 func (s *Server) handleDockerAppDetail(w http.ResponseWriter, r *http.Request) {
+	noStoreDockerPage(w)
 	m, app, ok := s.dockerAppFromPath(w, r)
 	if !ok {
 		return
@@ -311,19 +340,57 @@ func (s *Server) handleDockerAppDetail(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
 	containers, statusErr := m.Containers(ctx, app)
-	compose, composeErr := m.Compose(app)
-	logs := ""
-	var logsErr error
-	if len(containers) > 0 {
-		logs, logsErr = m.Logs(ctx, app, 300)
-	}
-	hints := dockerapps.Analyze(compose, "")
 	job := m.Job(app.Name)
 	s.render(w, r, "docker_app", map[string]any{
 		"App": app, "Containers": containers, "StatusError": errorText(statusErr),
-		"Compose": compose, "ComposeError": errorText(composeErr), "Logs": logs, "LogsError": errorText(logsErr),
-		"Hints": hints, "Job": job, "Busy": m.Busy(),
+		"Job": job, "Busy": m.Busy(),
 	})
+}
+
+func noStoreDockerPage(w http.ResponseWriter) {
+	h := w.Header()
+	h.Set("Cache-Control", "no-store, private, max-age=0")
+	h.Set("Pragma", "no-cache")
+	h.Set("Expires", "0")
+}
+
+func writeDockerText(w http.ResponseWriter, text string) {
+	noStoreDockerPage(w)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte(text))
+}
+
+func (s *Server) handleDockerAppLogs(w http.ResponseWriter, r *http.Request) {
+	noStoreDockerPage(w)
+	m, app, ok := s.dockerAppFromPath(w, r)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+	defer cancel()
+	logs, err := m.Logs(ctx, app, 300)
+	if err != nil {
+		http.Error(w, "读取日志失败："+err.Error(), http.StatusBadGateway)
+		return
+	}
+	if strings.TrimSpace(logs) == "" {
+		logs = "暂无日志。\n"
+	}
+	writeDockerText(w, logs)
+}
+
+func (s *Server) handleDockerAppCompose(w http.ResponseWriter, r *http.Request) {
+	noStoreDockerPage(w)
+	m, app, ok := s.dockerAppFromPath(w, r)
+	if !ok {
+		return
+	}
+	compose, err := m.Compose(app)
+	if err != nil {
+		http.Error(w, "读取 Compose 失败："+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeDockerText(w, compose)
 }
 
 func errorText(err error) string {
@@ -466,29 +533,16 @@ func (s *Server) handleDockerAppDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	ref, err := m.Ref(app)
 	if err == nil {
-		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
-		_, err = m.RunJob(ctx, app.Name, "正在卸载 "+app.Title(), func(jobCtx context.Context) (string, error) {
-			output, runErr := m.Helper.Run(jobCtx, "down", ref)
-			if runErr != nil {
-				return output, runErr
-			}
-			archive, archiveErr := m.ArchiveAppLocked(app)
-			if archiveErr != nil {
-				return output, archiveErr
-			}
-			if output != "" && !strings.HasSuffix(output, "\n") {
-				output += "\n"
-			}
-			return output + "项目文件已归档到 " + archive, nil
+		err = m.StartJob("@uninstall", "正在彻底卸载 "+app.Title(), func(jobCtx context.Context) (string, error) {
+			return m.Helper.Run(jobCtx, "uninstall", ref)
 		})
-		cancel()
 	}
 	if err != nil {
-		flashErr(w, "卸载失败，应用文件没有删除：%v", err)
+		flashErr(w, "卸载没能开始：%v", err)
 		redirect(w, r, "/docker/apps/"+app.Name)
 		return
 	}
-	flashOK(w, "已卸载 %s。命名卷和项目目录中的数据均已保留。", app.Title())
+	flashWarn(w, "正在彻底卸载 %s：将删除容器、网络、Compose 卷、本地构建镜像和整个项目目录。请稍后刷新查看结果。", app.Title())
 	redirect(w, r, "/docker")
 }
 

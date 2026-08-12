@@ -33,3 +33,16 @@ func (m *Manager) StartEngineInstall() error {
 		return "", err
 	})
 }
+
+func (m *Manager) StartEngineUpdate() error {
+	if ok, why := m.InstallerAvailable(); !ok {
+		return errors.New(why)
+	}
+	return m.StartJob("@engine", "正在更新 Docker Engine 和 Compose", func(ctx context.Context) (string, error) {
+		resp, err := m.Helper.Do(ctx, HelperRequest{Action: "engine-update"})
+		if resp != nil {
+			return resp.Output, err
+		}
+		return "", err
+	})
+}

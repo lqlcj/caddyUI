@@ -48,16 +48,12 @@
   <div class="settings-tool">
     <div class="settings-tool-body">
       <div class="settings-tool-title">
-        <strong>仅允许本机访问 81 端口</strong>
+        <strong>81 端口仅限本机访问</strong>
         <span class="tag tag-ok">推荐</span>
       </div>
       <p>
-        确认 HTTPS 域名可以访问后，在 VPS 终端执行复制的命令。它会先备份服务文件，
-        再把面板从全网监听改为仅本机监听并重启服务。
-      </p>
-      <p class="settings-tool-note">
-        执行后无法再用 <code>http://服务器IP:81</code> 访问，HTTPS 域名不受影响。
-        仅适用于本项目一键安装的 systemd 部署。
+        确认 HTTPS 域名可用后执行；此后无法再通过 <code>服务器IP:81</code> 访问。
+        仅适用于一键安装版本。
       </p>
     </div>
     <textarea id="bind-local-command" hidden readonly aria-hidden="true" tabindex="-1">sudo cp /etc/systemd/system/caddyui.service /etc/systemd/system/caddyui.service.bak &amp;&amp; \
@@ -67,7 +63,7 @@ sudo systemctl restart caddyui &amp;&amp; \
 sleep 1 &amp;&amp; \
 ss -lntp | grep ':81'</textarea>
     <button type="button" class="btn btn-primary settings-tool-action"
-            data-copy-target="#bind-local-command">复制修改命令</button>
+            data-copy-target="#bind-local-command">复制命令</button>
   </div>
 </section>
 
@@ -76,14 +72,14 @@ ss -lntp | grep ':81'</textarea>
   <form method="post" action="/settings/acme" class="form">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
 
-    <label class="field">
+    <div class="field">
       <span class="label">联系邮箱</span>
-      <input type="email" name="acme_email" value="{{.ACMEEmail}}" placeholder="you@example.com">
+      <span class="mono break">{{if .ACMEEmail}}{{.ACMEEmail}}{{else}}未设置{{end}}</span>
       <span class="hint">
-        证书续期失败时 Let's Encrypt 会往这里发提醒邮件 —— 这是唯一能提前
-        知道证书要出问题的渠道，别清空。
+        使用首次创建管理员账号时填写的邮箱。证书续期失败时 Let's Encrypt
+        会往这里发提醒邮件；此处仅展示，不能修改。
       </span>
-    </label>
+    </div>
 
     <details class="advanced"{{if .ACMECA}} open{{end}}>
       <summary>高级选项</summary>

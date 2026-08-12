@@ -143,18 +143,10 @@
           ｜ 颁发者 {{.Issuer}}
         </p>
         {{end}}
-        <div class="cert-paths">
-          <div class="path-row">
-            <span class="path-label">证书</span>
-            <span class="path-value">{{.CertPath}}</span>
-            <button type="button" class="copy-btn" data-copy="{{.CertPath}}">复制</button>
-          </div>
+        <div class="cert-path-actions">
+          <button type="button" class="btn btn-sm" data-copy="{{.CertPath}}">复制证书地址</button>
           {{with .KeyPath}}
-          <div class="path-row">
-            <span class="path-label">私钥</span>
-            <span class="path-value">{{.}}</span>
-            <button type="button" class="copy-btn" data-copy="{{.}}">复制</button>
-          </div>
+          <button type="button" class="btn btn-sm" data-copy="{{.}}">复制私钥地址</button>
           {{end}}
         </div>
       {{else}}

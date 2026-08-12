@@ -18,7 +18,10 @@ import (
 	"time"
 )
 
-const maxHelperOutput = 1 << 20
+const (
+	maxHelperOutput = 1 << 20
+	maxLogOutput    = 256 << 10
+)
 
 // HelperServer is the narrowly-scoped privileged side of Docker application
 // management. It accepts only a fixed list of Docker/Compose operations and
@@ -159,7 +162,7 @@ func (h *HelperServer) execute(ctx context.Context, req HelperRequest) HelperRes
 		defer h.opMu.Unlock()
 	}
 	switch req.Action {
-	case "engine-install":
+	case "engine-install", "engine-update":
 		out, err := h.installDocker(ctx)
 		if err != nil {
 			return failResponse(err, out)
@@ -275,6 +278,19 @@ func (h *HelperServer) execute(ctx context.Context, req HelperRequest) HelperRes
 			return failResponse(err, out)
 		}
 		return HelperResponse{OK: true, Output: out}
+	case "uninstall":
+		out, err := h.compose(ctx, ref, "down", "--volumes", "--remove-orphans", "--rmi", "local")
+		if err != nil {
+			return failResponse(err, out)
+		}
+		if err := h.removeAppDir(ref); err != nil {
+			return HelperResponse{OK: false, Error: "删除项目目录失败: " + err.Error(), Output: out}
+		}
+		if out != "" && !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		out += "已删除容器、网络、Compose 卷、项目本地构建镜像和项目目录\n"
+		return HelperResponse{OK: true, Output: out}
 	case "ps":
 		containers, err := h.ps(ctx, ref)
 		if err != nil {
@@ -286,7 +302,7 @@ func (h *HelperServer) execute(ctx context.Context, req HelperRequest) HelperRes
 		if tail < 20 || tail > 2000 {
 			tail = 300
 		}
-		out, err := h.compose(ctx, ref, "logs", "--no-color", "--timestamps", "--tail", strconv.Itoa(tail))
+		out, err := h.composeWithLimit(ctx, ref, maxLogOutput, true, "logs", "--no-color", "--timestamps", "--tail", strconv.Itoa(tail))
 		if err != nil {
 			return failResponse(err, out)
 		}
@@ -298,12 +314,22 @@ func (h *HelperServer) execute(ctx context.Context, req HelperRequest) HelperRes
 
 func helperMutation(action string) bool {
 	switch action {
-	case "engine-install", "image-remove", "image-pull", "image-prune",
-		"deploy", "update", "up", "stop", "restart", "down", "validate":
+	case "engine-install", "engine-update", "image-remove", "image-pull", "image-prune",
+		"deploy", "update", "up", "stop", "restart", "down", "uninstall", "validate":
 		return true
 	default:
 		return false
 	}
+}
+
+func (h *HelperServer) removeAppDir(ref HelperAppRef) error {
+	root := filepath.Clean(h.AppsRoot)
+	dir := filepath.Clean(ref.AppDir)
+	expected := filepath.Join(root, ref.Name)
+	if dir == root || dir != expected || !inside(root, dir) {
+		return errors.New("拒绝删除 Docker 应用目录之外的路径")
+	}
+	return os.RemoveAll(dir)
 }
 
 func failResponse(err error, output string) HelperResponse {
@@ -518,6 +544,10 @@ func (h *HelperServer) compose(ctx context.Context, ref HelperAppRef, args ...st
 	return h.run(ctx, ref.ProjectDir, h.composeArgs(ref, args...)...)
 }
 
+func (h *HelperServer) composeWithLimit(ctx context.Context, ref HelperAppRef, limit int, keepTail bool, args ...string) (string, error) {
+	return h.runLimited(ctx, ref.ProjectDir, limit, keepTail, h.composeArgs(ref, args...)...)
+}
+
 func (h *HelperServer) deploy(ctx context.Context, ref HelperAppRef) (string, error) {
 	var out strings.Builder
 	writeStep := func(title string, args ...string) error {
@@ -605,6 +635,10 @@ func (h *HelperServer) imageExists(ctx context.Context, wanted string) bool {
 }
 
 func (h *HelperServer) run(ctx context.Context, dir string, args ...string) (string, error) {
+	return h.runLimited(ctx, dir, maxHelperOutput, false, args...)
+}
+
+func (h *HelperServer) runLimited(ctx context.Context, dir string, limit int, keepTail bool, args ...string) (string, error) {
 	h.dockerMu.RLock()
 	docker := h.docker
 	h.dockerMu.RUnlock()
@@ -620,12 +654,16 @@ func (h *HelperServer) run(ctx context.Context, dir string, args ...string) (str
 		"COMPOSE_ANSI=never",
 		"DOCKER_CLI_HINTS=false",
 	}
-	buf := &limitedBuffer{limit: maxHelperOutput}
+	buf := &limitedBuffer{limit: limit, keepTail: keepTail}
 	cmd.Stdout, cmd.Stderr = buf, buf
 	err := cmd.Run()
 	out := buf.String()
 	if buf.truncated {
-		out += "\n……输出过长，只保留前面的内容……\n"
+		if keepTail {
+			out = "……输出过长，只保留最后面的内容……\n" + out
+		} else {
+			out += "\n……输出过长，只保留前面的内容……\n"
+		}
 	}
 	if ctx.Err() != nil {
 		return out, fmt.Errorf("Docker 操作超时: %w", ctx.Err())
@@ -640,6 +678,7 @@ type limitedBuffer struct {
 	mu        sync.Mutex
 	buf       bytes.Buffer
 	limit     int
+	keepTail  bool
 	truncated bool
 }
 
@@ -647,6 +686,27 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	original := len(p)
+	if b.keepTail {
+		if b.limit <= 0 {
+			b.truncated = true
+			return original, nil
+		}
+		if len(p) >= b.limit {
+			b.buf.Reset()
+			_, _ = b.buf.Write(p[len(p)-b.limit:])
+			b.truncated = true
+			return original, nil
+		}
+		overflow := b.buf.Len() + len(p) - b.limit
+		if overflow > 0 {
+			current := b.buf.Bytes()
+			copy(current, current[overflow:])
+			b.buf.Truncate(len(current) - overflow)
+			b.truncated = true
+		}
+		_, _ = b.buf.Write(p)
+		return original, nil
+	}
 	remaining := b.limit - b.buf.Len()
 	if remaining <= 0 {
 		b.truncated = true
@@ -663,7 +723,15 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 func (b *limitedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.String()
+	out := b.buf.String()
+	if !b.keepTail || !b.truncated {
+		return out
+	}
+	start := 0
+	for start < len(out) && out[start]&0xc0 == 0x80 {
+		start++
+	}
+	return out[start:]
 }
 
 func lastNonEmptyLine(s string) string {

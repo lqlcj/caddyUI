@@ -177,9 +177,9 @@ func (s *Server) handleSetupSubmit(w http.ResponseWriter, r *http.Request) {
 	// 注册邮箱直接当证书联系邮箱用，省掉「设置里还有一格要填」这一步。
 	//
 	// Let's Encrypt 会往这个地址发证书续期失败的告警，这是唯一能提前知道
-	// 证书要出问题的渠道，不该指望用户自己想起来去填。设置页里随时能改。
+	// 证书要出问题的渠道，不该指望用户自己想起来去填。设置页只读展示该值。
 	if err := s.svc.Store.SetSetting(app.SettingACMEEmail, email); err != nil {
-		log.Printf("写入 ACME 联系邮箱失败（不影响使用，可在设置页手动填）: %v", err)
+		log.Printf("写入 ACME 联系邮箱失败（管理员账号已创建）: %v", err)
 	}
 
 	if err := s.startSession(w, r, user.ID); err != nil {

@@ -25,6 +25,8 @@ const (
 	maxEnvSize      = 512 << 10
 	maxArchiveSize  = 200 << 20
 	maxArchiveFiles = 5000
+	maxRetainedJobs = 32
+	jobRetention    = 24 * time.Hour
 )
 
 var composeCandidates = []string{
@@ -1008,9 +1010,8 @@ func (m *Manager) StartJob(key, action string, fn func(context.Context) (string,
 }
 
 // RunJob serializes a request-bound Docker mutation with background jobs.
-// Synchronous operations such as uninstalling or deleting an image still need
-// the same global lock, otherwise they can race a deploy that is already using
-// the Compose files or Docker daemon.
+// Synchronous operations such as deleting an image still need the same global
+// lock, otherwise they can race a deploy that is already using Docker.
 func (m *Manager) RunJob(ctx context.Context, key, action string, fn func(context.Context) (string, error)) (string, error) {
 	if m.Busy() {
 		return "", errors.New("已有 Docker 操作正在进行，请稍后刷新")
@@ -1035,10 +1036,13 @@ func (m *Manager) beginOperation(key, action string, trackJob bool) error {
 		return errors.New("已有 Docker 操作正在进行，请稍后刷新")
 	}
 	if trackJob {
+		now := time.Now()
+		m.pruneJobsLocked(now)
 		if old, ok := m.jobs[key]; ok && old.Running() {
 			return errors.New("这个应用已有操作正在进行，请稍后刷新")
 		}
-		m.jobs[key] = Job{Key: key, Action: action, State: JobRunning, StartedAt: time.Now()}
+		m.jobs[key] = Job{Key: key, Action: action, State: JobRunning, StartedAt: now}
+		m.pruneJobsLocked(now)
 	}
 	m.global = true
 	return nil
@@ -1057,13 +1061,52 @@ func (m *Manager) finishOperation(key, output string, err error, trackJob bool) 
 			job.State = JobOK
 		}
 		m.jobs[key] = job
+		m.pruneJobsLocked(job.FinishedAt)
 	}
 	m.global = false
+}
+
+// pruneJobsLocked keeps transient Docker task output small and bounded. The
+// UI only needs recent results; Compose files and Docker remain the source of
+// truth. Running work is never removed.
+func (m *Manager) pruneJobsLocked(now time.Time) {
+	cutoff := now.Add(-jobRetention)
+	for key, job := range m.jobs {
+		if !job.Running() && !job.FinishedAt.IsZero() && job.FinishedAt.Before(cutoff) {
+			delete(m.jobs, key)
+		}
+	}
+	if len(m.jobs) <= maxRetainedJobs {
+		return
+	}
+	type completedJob struct {
+		key      string
+		finished time.Time
+	}
+	completed := make([]completedJob, 0, len(m.jobs))
+	for key, job := range m.jobs {
+		if job.Running() {
+			continue
+		}
+		finished := job.FinishedAt
+		if finished.IsZero() {
+			finished = job.StartedAt
+		}
+		completed = append(completed, completedJob{key: key, finished: finished})
+	}
+	sort.Slice(completed, func(i, j int) bool { return completed[i].finished.Before(completed[j].finished) })
+	for _, job := range completed {
+		if len(m.jobs) <= maxRetainedJobs {
+			break
+		}
+		delete(m.jobs, job.key)
+	}
 }
 
 func (m *Manager) Job(key string) *Job {
 	m.jobsMu.Lock()
 	defer m.jobsMu.Unlock()
+	m.pruneJobsLocked(time.Now())
 	job, ok := m.jobs[key]
 	if !ok {
 		return nil
@@ -1075,6 +1118,7 @@ func (m *Manager) Job(key string) *Job {
 func (m *Manager) ActiveJob() *Job {
 	m.jobsMu.Lock()
 	defer m.jobsMu.Unlock()
+	m.pruneJobsLocked(time.Now())
 	for _, job := range m.jobs {
 		if job.Running() {
 			copy := job
@@ -1087,6 +1131,7 @@ func (m *Manager) ActiveJob() *Job {
 func (m *Manager) Jobs() map[string]Job {
 	m.jobsMu.Lock()
 	defer m.jobsMu.Unlock()
+	m.pruneJobsLocked(time.Now())
 	out := make(map[string]Job, len(m.jobs))
 	for k, v := range m.jobs {
 		out[k] = v
@@ -1139,47 +1184,4 @@ func removeImportDir(dir string) error {
 		}
 	}
 	return os.Remove(dir)
-}
-
-// ArchiveApp removes an application from the active list without deleting its
-// files. Relative bind-mount data such as ./data may live inside the project
-// directory, so a recoverable rename is safer than recursive deletion.
-func (m *Manager) ArchiveApp(app *App) (string, error) {
-	m.mutation.Lock()
-	defer m.mutation.Unlock()
-	return m.archiveApp(app)
-}
-
-// ArchiveAppLocked is for a callback already running inside RunJob, which
-// holds the mutation lock for the whole Docker operation.
-func (m *Manager) ArchiveAppLocked(app *App) (string, error) {
-	return m.archiveApp(app)
-}
-
-func (m *Manager) archiveApp(app *App) (string, error) {
-	dir, err := m.appDir(app.Name)
-	if err != nil {
-		return "", err
-	}
-	if dir != app.Dir {
-		return "", errors.New("应用目录不匹配")
-	}
-	archiveRoot := filepath.Join(filepath.Dir(m.Root), "docker-archive")
-	if err := os.MkdirAll(archiveRoot, 0o750); err != nil {
-		return "", err
-	}
-	stamp := time.Now().Format("20060102-150405")
-	target := filepath.Join(archiveRoot, fmt.Sprintf("%s-%s", app.Name, stamp))
-	for i := 2; ; i++ {
-		if _, err := os.Stat(target); errors.Is(err, os.ErrNotExist) {
-			break
-		} else if err != nil {
-			return "", err
-		}
-		target = filepath.Join(archiveRoot, fmt.Sprintf("%s-%s-%d", app.Name, stamp, i))
-	}
-	if err := os.Rename(dir, target); err != nil {
-		return "", err
-	}
-	return target, nil
 }

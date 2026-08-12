@@ -162,18 +162,8 @@ func (s *Server) handleCaddyUpgrade(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSettingsACME(w http.ResponseWriter, r *http.Request) {
-	email := store.NormalizeEmail(r.PostFormValue("acme_email"))
 	ca := strings.TrimSpace(r.PostFormValue("acme_ca"))
 
-	// 邮箱会原样进 Caddyfile 当一个 token，含空白或大括号会破坏配置结构。
-	// ValidateEmail 的字符白名单已经把这些挡住了。
-	if email != "" {
-		if err := store.ValidateEmail(email); err != nil {
-			flashErr(w, "%v", err)
-			redirect(w, r, "/settings")
-			return
-		}
-	}
 	if ca != "" && !strings.HasPrefix(ca, "https://") {
 		flashErr(w, "ACME 目录地址必须以 https:// 开头。")
 		redirect(w, r, "/settings")
@@ -185,11 +175,6 @@ func (s *Server) handleSettingsACME(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.svc.Store.SetSetting(app.SettingACMEEmail, email); err != nil {
-		flashErr(w, "保存失败：%v", err)
-		redirect(w, r, "/settings")
-		return
-	}
 	if err := s.svc.Store.SetSetting(app.SettingACMECA, ca); err != nil {
 		flashErr(w, "保存失败：%v", err)
 		redirect(w, r, "/settings")
