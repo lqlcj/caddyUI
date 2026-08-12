@@ -212,11 +212,12 @@ ss -lntp | grep ':81'</textarea>
 <section class="panel panel-quiet">
   <h2>备份提醒</h2>
   <p class="hint hint-block">
-    要完整备份，需要两样东西：<br>
+    要完整备份，需要这些内容：<br>
     1. 面板数据库 <code>/var/lib/caddyui/caddyui.db</code>（站点、账号、配置历史）<br>
-    2. <strong>Caddy 的数据目录</strong>{{with .DataDir}} <code>{{.}}</code>{{end}}，
+    2. Docker 应用配置 <code>/var/lib/caddyui/docker-apps</code>（如果使用了 Docker 菜单）<br>
+    3. <strong>Caddy 的数据目录</strong>{{with .DataDir}} <code>{{.}}</code>{{end}}，
     里面是所有已签发的证书和 ACME 账户密钥。<br>
-    第 2 项特别容易被忽略 —— 丢了会导致重装后要重新签发全部证书，
+    Docker 应用挂载到其它目录或命名卷里的业务数据也需要另外备份。最后一项特别容易被忽略 —— 丢了会导致重装后要重新签发全部证书，
     而 Let's Encrypt 对同一组域名有每周 5 张的速率限制，撞上就得等几天。
   </p>
 </section>

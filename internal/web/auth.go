@@ -22,6 +22,7 @@ import (
 const (
 	sessionCookie = "caddyui_session"
 	sessionTTL    = 14 * 24 * time.Hour
+	maxDockerForm = 4 << 20
 )
 
 type ctxKey int
@@ -63,8 +64,11 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		if r.Method == http.MethodPost {
+			if strings.HasPrefix(r.URL.Path, "/docker") {
+				r.Body = http.MaxBytesReader(w, r.Body, maxDockerForm)
+			}
 			if err := r.ParseForm(); err != nil {
-				http.Error(w, "表单解析失败", http.StatusBadRequest)
+				http.Error(w, "表单太大或格式不正确", http.StatusBadRequest)
 				return
 			}
 			if !checkOrigin(r) || r.PostFormValue("csrf") != sess.CSRF {

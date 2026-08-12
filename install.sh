@@ -10,7 +10,8 @@
 #   3. 取 caddyui 二进制：优先下 Release，下不到就现场编译
 #   4. 从老版本 Relay 平滑迁移（如果检测到的话）
 #   5. 写 systemd 单元和引导配置
-#   6. 启动两个服务并设为开机自启
+#   6. 安装可选的 Docker 应用管理助手
+#   7. 启动服务并设为开机自启
 #
 # 脚本可以重复执行（等于升级），不会把已有数据弄丢。
 #
@@ -33,7 +34,9 @@ DATA_DIR=/var/lib/caddyui
 OLD_DATA_DIR=/var/lib/relay
 HELPER_DIR=/usr/local/lib/caddyui
 HELPER="$HELPER_DIR/upgrade-caddy.sh"
+DOCKER_INSTALLER="$HELPER_DIR/install-docker.sh"
 SUDOERS=/etc/sudoers.d/caddyui
+DOCKER_APPS_DIR="$DATA_DIR/docker-apps"
 PANEL_PORT="${PANEL_PORT:-81}"
 GO_MIN=1.25.0
 
@@ -209,6 +212,7 @@ if [ -f "$SYSTEMD_DIR/relay.service" ] || [ -x "$OLD_BIN" ]; then
 fi
 
 install -d -o caddy -g caddy -m 0750 "$DATA_DIR"
+install -d -o caddy -g caddy -m 0750 "$DOCKER_APPS_DIR"
 
 # 老数据库搬过来。用 cp 不用 mv：万一新版本有问题，老目录还在原地能退回去。
 if [ -f "$OLD_DATA_DIR/relay.db" ] && [ ! -f "$DATA_DIR/caddyui.db" ] && [ ! -f "$DATA_DIR/relay.db" ]; then
@@ -264,6 +268,10 @@ fetch deploy/upgrade-caddy.sh "$TMP/upgrade-caddy.sh"
 install -d -o root -g root -m 0755 "$HELPER_DIR"
 install -o root -g root -m 0755 "$TMP/upgrade-caddy.sh" "$HELPER"
 
+info "安装 Docker 安装助手"
+fetch deploy/install-docker.sh "$TMP/install-docker.sh"
+install -o root -g root -m 0755 "$TMP/install-docker.sh" "$DOCKER_INSTALLER"
+
 if command -v sudo >/dev/null 2>&1; then
   fetch deploy/caddyui.sudoers "$TMP/caddyui.sudoers"
 
@@ -288,6 +296,7 @@ fi
 info "安装 systemd 单元"
 fetch deploy/caddy.service   "$TMP/caddy.service"
 fetch deploy/caddyui.service "$TMP/caddyui.service"
+fetch deploy/caddyui-docker.service "$TMP/caddyui-docker.service"
 
 install -m 0644 "$TMP/caddy.service" "$SYSTEMD_DIR/caddy.service"
 
@@ -295,11 +304,14 @@ install -m 0644 "$TMP/caddy.service" "$SYSTEMD_DIR/caddy.service"
 sed "s|-listen 0.0.0.0:81|-listen 0.0.0.0:${PANEL_PORT}|" \
     "$TMP/caddyui.service" > "$SYSTEMD_DIR/caddyui.service"
 chmod 0644 "$SYSTEMD_DIR/caddyui.service"
+install -m 0644 "$TMP/caddyui-docker.service" "$SYSTEMD_DIR/caddyui-docker.service"
 
 systemctl daemon-reload
 systemctl reset-failed relay >/dev/null 2>&1 || true
 systemctl enable --now caddy
 sleep 1
+systemctl enable caddyui-docker >/dev/null 2>&1 || true
+systemctl restart caddyui-docker || true
 systemctl enable caddyui >/dev/null 2>&1 || true
 systemctl restart caddyui || true
 sleep 2
@@ -320,9 +332,15 @@ if systemctl is-active --quiet caddy && systemctl is-active --quiet caddyui; the
   echo
   echo "  提示：云服务器记得在安全组里放行 ${PANEL_PORT}、80、443 端口。"
   echo "  ${PANEL_PORT} 是配置改崩时的救援通道，建议用防火墙只放给自己的 IP。"
+  if systemctl is-active --quiet caddyui-docker; then
+    echo "  Docker 应用管理已就绪；服务器没装 Docker 时，可直接在面板里一键安装。"
+  else
+    warn "Docker 管理助手没有启动；Docker 菜单会提示修复，其它功能不受影响。"
+  fi
 else
   warn "有服务没能启动，看一下日志："
   echo "    journalctl -u caddy -n 50 --no-pager"
   echo "    journalctl -u caddyui -n 50 --no-pager"
+  echo "    journalctl -u caddyui-docker -n 50 --no-pager"
   exit 1
 fi

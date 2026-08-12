@@ -1,0 +1,34 @@
+{{define "title"}}Docker 镜像{{end}}
+
+{{define "content"}}
+<div class="page-head">
+  <div><h1>Docker 镜像</h1><p class="page-sub">下载、查看和清理本机镜像</p></div>
+  <a href="/docker" class="btn">返回应用</a>
+</div>
+{{with .Error}}<div class="banner banner-err"><strong>读取镜像失败</strong><p>{{.}}</p></div>{{end}}
+
+{{with .Job}}
+  {{if .Running}}<div class="banner banner-ok"><strong>{{.Action}}</strong><p>正在后台下载，刷新本页查看结果。</p></div>
+  {{else if eq (printf "%s" .State) "failed"}}<div class="banner banner-err"><strong>{{.Action}}失败</strong><p>{{.Error}}</p>{{with .Output}}<pre class="code">{{.}}</pre>{{end}}</div>
+  {{else if eq (printf "%s" .State) "ok"}}<div class="banner banner-ok"><strong>{{.Action}}完成</strong></div>{{end}}
+{{end}}
+
+<section class="panel">
+  <h2>下载镜像</h2>
+  <form method="post" action="/docker/images/pull" class="inline-form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="text" name="image" required spellcheck="false" placeholder="例如 nginx:latest 或 mysql:8">
+    <button type="submit" class="btn btn-primary"{{if or (not .Docker.Available) .Busy}} disabled{{end}}>下载</button>
+  </form>
+  <p class="hint hint-block">一般无需手动下载：安装应用和“更新镜像并部署”都会自动完成。</p>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>本机镜像</h2><form method="post" action="/docker/images/prune" data-confirm="清理所有悬空镜像？正在使用的镜像不会删除。"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn btn-sm" type="submit"{{if or (not .Docker.Available) .Busy}} disabled{{end}}>清理悬空镜像</button></form></div>
+  {{if .Images}}
+  <div class="table-scroll"><table class="table"><thead><tr><th>镜像</th><th>大小</th><th>创建时间</th><th></th></tr></thead><tbody>
+    {{range .Images}}<tr><td class="mono break">{{.Name}}</td><td>{{.Size}}</td><td>{{.CreatedSince}}</td><td class="right"><form method="post" action="/docker/images/remove" data-confirm="删除镜像 {{.Name}}？正在被容器使用时 Docker 会拒绝。"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="image" value="{{.Name}}"><button class="btn btn-sm btn-danger" type="submit"{{if or (not $.Docker.Available) $.Busy}} disabled{{end}}>删除</button></form></td></tr>{{end}}
+  </tbody></table></div>
+  {{else}}<p class="muted">本机没有镜像。</p>{{end}}
+</section>
+{{end}}

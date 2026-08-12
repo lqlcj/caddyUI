@@ -21,10 +21,10 @@ die()  { printf '\033[1;31m错误:\033[0m %s\n' "$*" >&2; exit 1; }
 
 echo
 if [ "$KEEP_DATA" = "1" ]; then
-  warn "即将停止并卸载 CaddyUI / Caddy（保留数据库和证书）"
+  warn "即将停止并卸载 CaddyUI / Caddy（保留数据库、Docker 应用配置和证书）"
 else
   warn "即将删除下面这些东西，包含数据库和 HTTPS 证书，删了要重新申请证书："
-  echo "    /var/lib/caddyui    面板数据库（站点、账号、配置历史）"
+  echo "    /var/lib/caddyui    面板数据库和 Docker 应用配置"
   echo "    /var/lib/relay      老版本 Relay 的数据库（如果还在）"
   echo "    /var/lib/caddy      Caddy 的证书和 ACME 账户密钥"
   echo "    /etc/caddy          引导配置"
@@ -40,7 +40,7 @@ echo
 # ---------- 服务 ----------
 
 # relay 是老版本的服务名，一并清掉，免得留个抢端口的僵尸。
-for unit in caddyui relay caddy; do
+for unit in caddyui-docker caddyui relay caddy; do
   if systemctl list-unit-files "${unit}.service" >/dev/null 2>&1 \
      && systemctl cat "${unit}.service" >/dev/null 2>&1; then
     info "停止并禁用 ${unit}"
@@ -50,7 +50,7 @@ for unit in caddyui relay caddy; do
 done
 
 systemctl daemon-reload
-systemctl reset-failed caddyui relay caddy >/dev/null 2>&1 || true
+systemctl reset-failed caddyui-docker caddyui relay caddy >/dev/null 2>&1 || true
 
 # ---------- 二进制 ----------
 

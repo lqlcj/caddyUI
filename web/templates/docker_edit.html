@@ -1,0 +1,126 @@
+{{define "title"}}{{.Title}}{{end}}
+
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>{{.Title}}</h1>
+    <p class="page-sub">先改常用设置；看不懂的保持原样即可</p>
+  </div>
+  {{if and (not .Installing) .Draft.Source.URL}}
+  <form method="post" action="/docker/apps/{{.App.Name}}/github-refresh" data-confirm="重新读取 GitHub 上的 Compose？&#10;&#10;页面里尚未保存的改动会被覆盖；服务器当前正在运行的配置不会立即改变。">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button type="submit" class="btn">重新读取 GitHub 配置</button>
+  </form>
+  {{end}}
+</div>
+{{with .Error}}<div class="flash flash-err">{{.}}</div>{{end}}
+
+<form method="post" action="{{.Action}}" class="form panel">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <input type="hidden" name="source_url" value="{{.Draft.Source.URL}}">
+  <input type="hidden" name="source_owner" value="{{.Draft.Source.Owner}}">
+  <input type="hidden" name="source_repo" value="{{.Draft.Source.Repo}}">
+  <input type="hidden" name="source_ref" value="{{.Draft.Source.Ref}}">
+  <input type="hidden" name="source_compose_path" value="{{.Draft.Source.ComposePath}}">
+
+  <div class="field-row">
+    <label class="field">
+      <span class="label">显示名称</span>
+      <input type="text" name="display_name" value="{{.Draft.DisplayName}}" maxlength="100" required>
+    </label>
+    <label class="field">
+      <span class="label">内部名称</span>
+      <input type="text" name="name" value="{{.Draft.Name}}" pattern="[a-z0-9][a-z0-9_-]{0,47}" required{{if not .Installing}} readonly{{end}}>
+      <span class="hint">只用于容器和目录名称，安装后不再修改。</span>
+    </label>
+  </div>
+
+  {{if .Hints.Ports}}
+  <section class="easy-settings">
+    <h2>访问端口</h2>
+    <p class="hint hint-block">通常只需要避免与服务器现有端口冲突。容器内部端口不要改。</p>
+    <div class="settings-grid">
+      {{range .Hints.Ports}}
+      <label class="field easy-setting">
+        <span class="label">{{.Service}}：外部端口</span>
+        {{if .Simple}}
+        <input type="text" inputmode="numeric" name="{{portField .Service .Index}}" value="{{.Published}}" required>
+        <input type="hidden" name="{{portOriginalField .Service .Index}}" value="{{.Published}}">
+        <span class="hint">访问 <code>:{{.Published}}</code> → 容器内部 <code>:{{.Target}}</code>{{if .HostIP}}，绑定 {{.HostIP}}{{end}}{{if eq .HostIP "127.0.0.1"}}（只能本机/Caddy 访问，更安全）{{end}}</span>
+        {{else}}
+        <input type="text" value="{{.Raw}}" disabled>
+        <span class="hint">这个端口写法较复杂，请在下面的完整配置里修改。</span>
+        {{end}}
+      </label>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if .Hints.Env}}
+  <section class="easy-settings">
+    <h2>环境变量</h2>
+    <p class="hint hint-block">密码、时区和数据库设置通常都在这里。名称不熟悉时保持项目默认值。</p>
+    <div class="settings-grid">
+      {{range .Hints.Env}}
+      <label class="field easy-setting">
+        <span class="label">{{.Key}}</span>
+        <input type="{{if .Secret}}password{{else}}text{{end}}" name="env__{{.Key}}" value="{{.Value}}" spellcheck="false" autocomplete="off">
+        <input type="hidden" name="envorig__{{.Key}}" value="{{if .Generated}}{{else}}{{.Value}}{{end}}">
+        {{if .Generated}}<span class="hint"><span class="tag tag-ok">已自动生成强密码</span> 可直接使用，也可以改成自己的。</span>{{end}}
+        {{with .Comment}}<span class="hint">{{.}}</span>{{end}}
+      </label>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if .Hints.ComposeEnv}}
+  <section class="easy-settings">
+    <h2>应用参数</h2>
+    <p class="hint hint-block">这些设置直接来自 Compose，常见的是管理员账号、时区和数据库密码。</p>
+    <div class="settings-grid">
+      {{range .Hints.ComposeEnv}}
+      <label class="field easy-setting">
+        <span class="label">{{.Service}} · {{.Key}}</span>
+        <input type="{{if .Secret}}password{{else}}text{{end}}" name="{{composeEnvField .ServiceIndex .EntryIndex}}" value="{{.Value}}" spellcheck="false" autocomplete="off">
+        <input type="hidden" name="{{composeEnvOriginalField .ServiceIndex .EntryIndex}}" value="{{if .Generated}}{{else}}{{.Value}}{{end}}">
+        {{if .Generated}}<span class="hint"><span class="tag tag-ok">已自动生成强密码</span> 可直接使用。</span>{{end}}
+      </label>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if .Hints.HasBuild}}
+  <div class="banner banner-ok docker-note">
+    <strong>这个项目需要在服务器上构建镜像</strong>
+    <p>第一次安装会比直接下载镜像更久，也会临时占用更多内存和磁盘。</p>
+  </div>
+  {{end}}
+
+  <details class="advanced"{{if not .Hints.Ports}} open{{end}}>
+    <summary>完整 Compose 配置 <span class="summary-hint">高级设置，看不懂可以不改</span></summary>
+    <div class="advanced-body">
+      <label class="field">
+        <textarea name="compose" rows="22" class="mono compose-editor" required spellcheck="false">{{.Draft.Compose}}</textarea>
+        <span class="hint">安装前会运行 <code>docker compose config</code> 检查。这里允许项目使用 volumes、privileged 等完整 Compose 能力，只安装你信任的项目。</span>
+      </label>
+    </div>
+  </details>
+
+  <details class="advanced"{{if and .Draft.Env (not .Hints.Env)}} open{{end}}>
+    <summary>.env 环境变量文件 <span class="summary-hint">密码和可修改参数常在这里</span></summary>
+    <div class="advanced-body">
+      <label class="field">
+        <textarea name="env" rows="12" class="mono" spellcheck="false" placeholder="TZ=Asia/Shanghai&#10;APP_PASSWORD=请修改">{{.Draft.Env}}</textarea>
+      </label>
+    </div>
+  </details>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{if .Installing}}确认并开始安装{{else}}保存并检查{{end}}</button>
+    <a href="{{if .Installing}}/docker/import{{else}}/docker/apps/{{.App.Name}}{{end}}" class="btn">取消</a>
+  </div>
+</form>
+{{end}}

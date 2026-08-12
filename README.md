@@ -108,6 +108,40 @@ curl -fsSL https://raw.githubusercontent.com/lqlcj/caddyUI/main/uninstall.sh | s
 配色跟 Claude 一套：暖米白底 + 赤陶橙点缀。右上角可以切深色模式，
 默认跟随系统。主题存在 cookie 里由服务端渲染，所以刷新页面不会先闪一下白底。
 
+### Docker 应用
+
+Docker 应用管理直接集成在同一个 CaddyUI 面板里，共用登录和主题，不会另开一个
+Dockge / Portainer 面板。面向不会写命令的使用方式：
+
+1. 粘贴公开 GitHub 项目地址、具体的 `compose.yaml` 地址，或完整 Compose 内容
+2. 自动识别外部端口、`.env` 和 Compose 里的常见环境变量
+3. 密码仍是 `change-me` 这类占位值时自动生成强密码
+4. 点击一次开始安装，后台拉取/构建镜像并启动容器
+
+安装后可以启动、停止、重启、看最近日志、编辑配置、拉取新镜像并重新部署、卸载，
+还有独立的镜像列表、手动拉取、删除和清理悬空镜像页面。服务器尚未安装 Docker 时，
+页面会提供“一键安装 / 修复 Docker”，目前支持 Debian、Ubuntu、CentOS、RHEL、
+Rocky Linux、AlmaLinux 和 Fedora。
+Raspberry Pi OS 也会使用 Docker 官方 Debian 仓库安装。
+
+GitHub 导入会下载整个公开仓库，所以项目依赖仓库里的 Dockerfile、脚本和配置文件时
+也能工作。私有仓库暂不支持；特别复杂、需要人工执行安装脚本的项目仍可能需要看日志
+调整完整 Compose 配置。
+
+从面板卸载应用时只移除容器和网络：命名卷不会删除，项目目录会移动到
+`/var/lib/caddyui/docker-archive`，包括可能保存在 `./data` 中的业务数据，避免误点
+一次就永久丢数据。
+
+> Docker/Compose 本身拥有接近宿主机 root 的能力。只安装你信任的项目，不要把面板账号
+> 分享给不可信的人。CaddyUI Web 进程没有直接访问 Docker socket；固定操作由独立的
+> root 助手通过本机 Unix socket 执行，且不会接受任意 shell 命令。
+
+Docker 功能仍由同一个 `caddyui` 二进制文件提供；systemd 只是用它额外启动一个小型
+root 助手进程来隔离 Docker 权限，这不是第二套 Web 面板，也没有增加第三个二进制。
+下面的约 45 MB 是 Caddy 与原面板的空闲实测，不包含这个助手、Docker daemon、
+containerd 以及你安装的容器。实际增加多少内存主要取决于具体 Docker 应用，低内存
+服务器应按应用文档预留资源。
+
 ---
 
 ## 为什么不直接用 Nginx Proxy Manager
@@ -200,6 +234,7 @@ internal/
     render.go                站点 → Caddyfile
   certs/                     在磁盘上定位 Caddy 签发的证书，读有效期
   caddybin/                  读 Caddy 版本、查官方最新版、触发升级
+  dockerapps/                GitHub/Compose 导入、应用/容器/镜像管理与隔离助手
   app/service.go             渲染 + 下发 + 记录版本 + 回滚
   web/                       路由、会话、CSRF、主题、各页面 handler
 web/
@@ -210,6 +245,8 @@ deploy/
   caddyui.service            面板的 systemd 单元
   upgrade-caddy.sh           root 拥有的升级助手（面板通过 sudo 调它）
   caddyui.sudoers            只放行上面那一个脚本的 sudo 授权
+  caddyui-docker.service     隔离的 Docker 管理助手
+  install-docker.sh          无参数的一键安装/修复 Docker 助手
 ```
 
 前端没有 node_modules，没有打包步骤，`go build` 一条命令出成品。
@@ -223,6 +260,8 @@ deploy/
 | `-caddy`       | `CADDYUI_CADDY_ADMIN`  | `127.0.0.1:2019` | Caddy Admin API 地址          |
 | `-caddy-data`  | `CADDYUI_CADDY_DATA`   | 自动探测         | Caddy 数据目录（证书在这里）  |
 | `-caddy-bin`   | `CADDYUI_CADDY_BIN`    | 自动探测         | Caddy 可执行文件路径          |
+| `-docker-apps` | `CADDYUI_DOCKER_APPS`  | 数据目录/docker-apps | Compose 应用目录           |
+| `-docker-socket` | `CADDYUI_DOCKER_SOCKET` | `/run/caddyui-docker.sock` | Docker 助手 socket |
 
 `-caddy` 支持两种写法：`127.0.0.1:2019`（TCP）或 `unix//run/caddy/admin.sock`。
 
@@ -232,10 +271,12 @@ deploy/
 
 ## 备份
 
-要备份**两样东西**，缺一不可：`/var/lib/caddyui/caddyui.db`（站点、账号、配置历史）
-和 `/var/lib/caddy`（Caddy 的证书和 ACME 账户密钥）。
+要备份这些内容：`/var/lib/caddyui/caddyui.db`（站点、账号、配置历史）、
+`/var/lib/caddyui/docker-apps`（导入的 Compose 项目）和 `/var/lib/caddy`
+（Caddy 的证书和 ACME 账户密钥）。Docker 应用自己挂载到其它宿主机目录或命名卷里的
+业务数据也要另外备份，面板不会猜测并复制它们。
 
-第二项**特别容易被忘掉**。丢了会导致重装后所有证书要重新签发，而 Let's Encrypt
+最后一项**特别容易被忘掉**。丢了会导致重装后所有证书要重新签发，而 Let's Encrypt
 对同一组域名有**每周 5 张**的速率限制，撞上了就得干等几天。
 
 ## 常见问题
@@ -295,6 +336,7 @@ Caddy 实际监听的一致。一键安装脚本装出来的是匹配的。
 - [x] 证书 / 私钥路径与有效期展示（v0.2）
 - [x] Claude 配色 + 深色模式（v0.2）
 - [x] 一键升级 Caddy 内核，官方源 + SHA-512 校验（v0.2）
+- [x] Docker Compose 应用导入、安装、日志、更新与镜像管理
 
 接下来：
 
@@ -308,9 +350,8 @@ Caddy 实际监听的一致。一键安装脚本装出来的是匹配的。
 - [ ] 多上游 + 健康检查
 - [ ] 两步验证、审计日志
 
-## 依赖
-
-只有两个：
+## Go 依赖
 
 - `modernc.org/sqlite` —— 纯 Go 的 SQLite，不需要 CGO，交叉编译一条命令
 - `golang.org/x/crypto` —— bcrypt（面板密码和站点访问密码共用）
+- `gopkg.in/yaml.v3` —— 分析和安全修改 Compose 的常用端口与环境变量

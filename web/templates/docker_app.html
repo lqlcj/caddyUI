@@ -1,0 +1,69 @@
+{{define "title"}}{{.App.Title}}{{end}}
+
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>{{.App.Title}}</h1>
+    <p class="page-sub mono">{{.App.Name}}</p>
+    {{with .App.Source.URL}}<p class="page-sub break">来源：<a href="{{.}}" target="_blank" rel="noopener noreferrer">{{.}}</a></p>{{end}}
+  </div>
+  <a href="/docker/apps/{{.App.Name}}/edit" class="btn">编辑配置</a>
+</div>
+
+{{with .Job}}
+  {{if .Running}}
+  <div class="banner banner-ok"><strong>{{.Action}}</strong><p>操作在后台进行，通常需要几秒到几分钟。刷新本页查看结果。</p></div>
+  {{else if eq (printf "%s" .State) "ok"}}
+  <div class="banner banner-ok"><strong>{{.Action}}完成</strong>{{with .Output}}<details class="job-output"><summary>查看输出</summary><pre class="code">{{.}}</pre></details>{{end}}</div>
+  {{else if eq (printf "%s" .State) "failed"}}
+  <div class="banner banner-err"><strong>{{.Action}}失败</strong><p>{{.Error}}</p>{{with .Output}}<details class="job-output"><summary>查看详细输出</summary><pre class="code">{{.}}</pre></details>{{end}}</div>
+  {{end}}
+{{end}}
+
+{{with .StatusError}}<div class="banner banner-err"><strong>读取容器状态失败</strong><p>{{.}}</p></div>{{end}}
+
+<section class="panel">
+  <div class="section-head"><h2>容器</h2><span class="muted small">{{len .Containers}} 个</span></div>
+  {{if .Containers}}
+  <div class="table-scroll">
+    <table class="table">
+      <thead><tr><th>服务</th><th>状态</th><th>镜像</th><th>访问端口</th></tr></thead>
+      <tbody>{{range .Containers}}
+        <tr>
+          <td><strong>{{if .Service}}{{.Service}}{{else}}{{.Name}}{{end}}</strong><br><span class="muted small mono">{{.Name}}</span></td>
+          <td>{{if .Running}}<span class="tag tag-ok">运行中</span>{{else}}<span class="tag tag-http">{{if .Status}}{{.Status}}{{else}}{{.State}}{{end}}</span>{{end}}</td>
+          <td class="mono break">{{.Image}}</td>
+          <td>{{range .Publishers}}{{if .PublishedPort}}{{if ne .Protocol "udp"}}<a href="#" data-open-port="{{.PublishedPort}}">打开 :{{.PublishedPort}}</a> <a href="/sites/new?upstream_port={{.PublishedPort}}&amp;note={{$.App.Title}}" class="small">配置域名</a>{{else}}<code>:{{.PublishedPort}}/udp</code>{{end}} {{end}}{{end}}</td>
+        </tr>
+      {{end}}</tbody>
+    </table>
+  </div>
+  {{else}}<p class="muted">还没有创建容器，或应用已经停止并移除。</p>{{end}}
+
+  <div class="form-actions docker-actions">
+    <form method="post" action="/docker/apps/{{.App.Name}}/action/up"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn" type="submit"{{if .Busy}} disabled{{end}}>启动</button></form>
+    <form method="post" action="/docker/apps/{{.App.Name}}/action/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn" type="submit"{{if .Busy}} disabled{{end}}>停止</button></form>
+    <form method="post" action="/docker/apps/{{.App.Name}}/action/restart"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn" type="submit"{{if .Busy}} disabled{{end}}>重启</button></form>
+    <form method="post" action="/docker/apps/{{.App.Name}}/action/update" data-confirm="拉取新镜像并重新部署 {{.App.Title}}？容器可能会短暂中断。"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn btn-primary" type="submit"{{if .Busy}} disabled{{end}}>更新镜像并部署</button></form>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>最近日志</h2><span class="muted small">最后 300 行，刷新页面更新</span></div>
+  {{with .LogsError}}<p class="err-text">{{.}}</p>{{end}}
+  {{if .Logs}}<pre class="code docker-logs">{{.Logs}}</pre>{{else}}<p class="muted">暂无日志。</p>{{end}}
+</section>
+
+<details class="advanced panel-like">
+  <summary>查看当前 Compose 配置</summary>
+  <div class="advanced-body">{{with .ComposeError}}<p class="err-text">{{.}}</p>{{end}}<pre class="code">{{.Compose}}</pre></div>
+</details>
+
+<section class="panel danger-zone">
+  <h2>卸载应用</h2>
+  <p class="hint hint-block">会停止并移除这个应用的容器和网络。命名卷不会删除，项目目录也会移到归档目录，因此使用 <code>./data</code> 保存的资料不会被误删。</p>
+  <form method="post" action="/docker/apps/{{.App.Name}}/delete" data-confirm="确定卸载「{{.App.Title}}」吗？&#10;&#10;容器和网络会移除；命名卷和项目文件会保留在服务器上。">
+    <input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="btn btn-danger"{{if .Busy}} disabled{{end}}>卸载应用</button>
+  </form>
+</section>
+{{end}}

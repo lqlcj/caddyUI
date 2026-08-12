@@ -1,0 +1,45 @@
+{{define "title"}}安装 Docker 应用{{end}}
+
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>安装 Docker 应用</h1>
+    <p class="page-sub">不需要输入命令，复制项目地址或配置即可</p>
+  </div>
+</div>
+
+{{if not .Docker.Available}}
+<div class="banner banner-err">
+  <strong>Docker 管理暂不可用</strong>
+  <p>{{.Docker.Error}}</p>
+</div>
+{{end}}
+{{with .Error}}<div class="flash flash-err">{{.}}</div>{{end}}
+
+<form method="post" action="/docker/import" class="form panel">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <label class="field">
+    <span class="label">粘贴项目 <span class="req">*</span></span>
+    <textarea name="source" rows="12" required autofocus spellcheck="false" class="mono"
+      placeholder="推荐：https://github.com/louislam/uptime-kuma&#10;&#10;也可以粘贴：&#10;services:&#10;  app:&#10;    image: nginx:latest&#10;    ports:&#10;      - 8080:80">{{.SourceText}}</textarea>
+    <span class="hint">
+      支持 GitHub 仓库首页、具体的 <code>compose.yaml</code> 文件地址，或完整 Compose 内容。
+      公开仓库会连同 Dockerfile 和附近配置一起导入；私有仓库暂不支持。
+    </span>
+  </label>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary"{{if not .Docker.Available}} disabled{{end}}>下一步：检查设置</button>
+    <a href="/docker" class="btn">取消</a>
+  </div>
+</form>
+
+<section class="panel panel-quiet">
+  <h2>怎么找到可以粘贴的内容？</h2>
+  <p class="hint hint-block">
+    在 GitHub 项目的安装说明里找 <code>docker compose</code>、<code>compose.yaml</code> 或
+    <code>docker-compose.yml</code>。最省事的是直接复制浏览器地址栏里的 GitHub 项目地址，
+    CaddyUI 会自动寻找常见配置文件。
+  </p>
+</section>
+{{end}}
+

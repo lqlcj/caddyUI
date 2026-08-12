@@ -1,0 +1,93 @@
+{{define "title"}}Docker 应用{{end}}
+
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>Docker 应用</h1>
+    <p class="page-sub">粘贴 GitHub 地址或 Compose 配置，一键安装和管理</p>
+  </div>
+  <div class="form-actions">
+    <a href="/docker/images" class="btn">镜像管理</a>
+    <form method="post" action="/docker/scan"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="btn">扫描现有应用</button></form>
+    <a href="/docker/import" class="btn btn-primary">安装应用</a>
+  </div>
+</div>
+
+{{if not .Docker.Available}}
+<div class="banner banner-err">
+  <strong>Docker 管理暂不可用</strong>
+  <p>{{if .Docker.Error}}{{.Docker.Error}}{{else}}Docker 助手没有运行。重新执行一键安装脚本可自动安装或修复。{{end}}</p>
+  {{with .Docker.AppsRoot}}<p class="mono small">应用目录：{{.}}</p>{{end}}
+</div>
+{{with .EngineJob}}
+  {{if .Running}}<div class="banner banner-ok"><strong>{{.Action}}</strong><p>正在下载和启动 Docker，刷新页面查看结果。</p></div>
+  {{else if eq (printf "%s" .State) "failed"}}<div class="banner banner-err"><strong>{{.Action}}失败</strong><p>{{.Error}}</p>{{with .Output}}<pre class="code">{{.}}</pre>{{end}}</div>
+  {{else if eq (printf "%s" .State) "ok"}}<div class="banner banner-ok"><strong>Docker 已安装或修复完成</strong><p>如果上方仍显示不可用，请等待几秒后再刷新。</p></div>{{end}}
+{{end}}
+{{if .InstallerAvailable}}
+<form method="post" action="/docker/engine/install" class="docker-install-action" data-confirm="从 Docker 官方仓库安装或修复 Docker Engine 和 Compose？">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <button type="submit" class="btn btn-primary"{{if .EngineBusy}} disabled{{end}}>一键安装 / 修复 Docker</button>
+</form>
+{{else}}{{with .InstallerBlocked}}<p class="hint">{{.}}</p>{{end}}{{end}}
+{{else}}
+<div class="docker-summary panel panel-quiet">
+  <span><strong>Docker</strong> <code>{{.Docker.DockerVersion}}</code></span>
+  <span><strong>Compose</strong> <code>{{.Docker.ComposeVersion}}</code></span>
+  <span class="muted small">应用配置保存在 {{.Docker.AppsRoot}}</span>
+</div>
+{{end}}
+
+{{with .ActiveJob}}
+  {{if ne .Key "@engine"}}<div class="banner banner-ok"><strong>{{.Action}}</strong><p>Docker 正在后台处理任务，完成前其它写操作会暂时禁用。</p></div>{{end}}
+{{end}}
+
+{{if .Cards}}
+<div class="cards">
+  {{range .Cards}}
+  <article class="card docker-card">
+    <div class="card-body">
+      <div class="domains">
+        <a class="domain" href="/docker/apps/{{.App.Name}}">{{.App.Title}}</a>
+      </div>
+      <div class="route">
+        {{if .Busy}}
+          <span class="tag tag-warn">{{.BusyAction}}</span>
+        {{else if gt .Running 0}}
+          <span class="tag tag-ok">{{.Running}} 个运行中</span>
+        {{else if gt .Total 0}}
+          <span class="tag tag-http">已停止</span>
+        {{else}}
+          <span class="tag tag-http">未创建容器</span>
+        {{end}}
+        {{range .Ports}}
+          {{if ne .Protocol "udp"}}<a href="/sites/new?upstream_port={{.PublishedPort}}"><code>:{{.PublishedPort}}</code></a>{{else}}<code>:{{.PublishedPort}}/udp</code>{{end}}
+        {{end}}
+      </div>
+      {{with .Error}}<p class="note err-text">{{.}}</p>{{end}}
+      {{with .App.Source.URL}}<p class="note break">来源：{{.}}</p>{{end}}
+    </div>
+    <div class="card-side">
+      <div class="card-actions">
+        <a href="/docker/apps/{{.App.Name}}" class="btn btn-sm">管理</a>
+        <form method="post" action="/docker/apps/{{.App.Name}}/action/{{if gt .Running 0}}restart{{else}}up{{end}}">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit" class="btn btn-sm"{{if or (not $.Docker.Available) .Busy}} disabled{{end}}>{{if gt .Running 0}}重启{{else}}启动{{end}}</button>
+        </form>
+        <form method="post" action="/docker/apps/{{.App.Name}}/action/update">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <button type="submit" class="btn btn-sm"{{if or (not $.Docker.Available) .Busy}} disabled{{end}}>更新</button>
+        </form>
+      </div>
+    </div>
+  </article>
+  {{end}}
+</div>
+{{else}}
+<div class="empty">
+  <h2>还没有 Docker 应用</h2>
+  <p>复制 GitHub 项目地址，或者复制项目提供的 Compose 内容。<br>CaddyUI 会先让你检查端口、密码等常用设置，再开始安装。</p>
+  <a href="/docker/import" class="btn btn-primary btn-lg">安装第一个应用</a>
+</div>
+{{end}}
+{{end}}

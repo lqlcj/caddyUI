@@ -25,13 +25,17 @@ func (s *Server) handleSiteList(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSiteNewForm(w http.ResponseWriter, r *http.Request) {
 	// 新站点的默认值：开 HTTPS、强制跳转、转发到本机 http。这是绝大多数人
 	// 想要的，理想情况下只需要填域名和端口两个格子。
-	s.renderSiteForm(w, r, &store.Site{
+	site := &store.Site{
 		UpstreamScheme: "http",
 		UpstreamHost:   "127.0.0.1",
 		Enabled:        true,
 		HTTPS:          true,
 		ForceHTTPS:     true,
-	}, "", true)
+	}
+	if port, err := strconv.Atoi(r.URL.Query().Get("upstream_port")); err == nil && port >= 1 && port <= 65535 {
+		site.UpstreamPort = port
+	}
+	s.renderSiteForm(w, r, site, "", true)
 }
 
 func (s *Server) handleSiteEditForm(w http.ResponseWriter, r *http.Request) {

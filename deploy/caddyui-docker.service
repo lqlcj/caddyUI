@@ -1,0 +1,39 @@
+[Unit]
+Description=CaddyUI Docker 管理助手
+After=network-online.target
+Wants=network-online.target
+PartOf=caddyui.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# 这是唯一拥有 Docker 管理权限的进程。Web 面板本身仍然以非特权 caddy 用户运行，
+# 通过 0660 的本机 Unix socket 请求固定操作；助手不接受任意 shell 命令。
+ExecStart=/usr/local/bin/caddyui \
+    -docker-helper \
+    -docker-apps /var/lib/caddyui/docker-apps \
+    -docker-socket /run/caddyui-docker.sock \
+    -docker-socket-group caddy
+
+Restart=always
+RestartSec=3s
+RuntimeDirectory=caddyui-docker
+RuntimeDirectoryMode=0750
+UMask=0027
+
+Environment=GOMEMLIMIT=32MiB
+Environment=GOGC=50
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=false
+
+# 不能对这个助手启用过强的 namespace / capability 限制：Compose 允许项目按需
+# 构建镜像、挂载目录、创建网络和启动 privileged 容器，这些操作由 Docker CLI
+# 和 daemon 协作完成。安全边界放在固定 RPC 操作、SO_PEERCRED 和 socket 权限上。
+
+[Install]
+WantedBy=multi-user.target
