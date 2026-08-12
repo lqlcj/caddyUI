@@ -4,12 +4,12 @@
    配色取自 Claude：暖米白底 + 赤陶橙点缀，深色模式是同一套色相压暗，
    不是简单反相。
 
-   三种主题状态：
-     :root                            浅色（默认）
-     @media dark + :not([data-theme=light])   跟随系统，用户没手动选过
-     :root[data-theme="dark"]         用户手动选了深色
+   服务端会始终写入 data-theme，未保存偏好时写 dark：
+     :root[data-theme="dark"]         默认深色或用户手动选择深色
+     :root[data-theme="light"]        用户手动选择浅色（使用 :root 的浅色 token）
+     @media dark + :not([data-theme=light])   缺少 data-theme 时的兼容兜底
    深色的两份 token 是刻意重复的 —— 纯 CSS 没法给选择器起别名，
-   而这两个条件必须分开写：一个是"系统说黑"，一个是"用户说黑"。 */
+   而这两个条件必须分开写：一个是兼容兜底，一个是页面明确选择深色。 */
 
 :root {
   color-scheme: light;
@@ -176,8 +176,15 @@ code {
 .brand-mark {
   width: 22px; height: 22px;
   border-radius: 6px;
-  background: var(--accent);
+  background: url("/static/favicon.svg") center / contain no-repeat;
+  box-shadow: 0 2px 7px var(--accent-ring);
   flex: 0 0 auto;
+  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+}
+.brand:hover .brand-mark {
+  transform: translateY(-1px) rotate(-3deg) scale(1.04);
+  filter: saturate(1.08) brightness(1.04);
+  box-shadow: 0 3px 10px var(--accent-ring);
 }
 
 .nav { display: flex; gap: 2px; flex: 1; min-width: 0; }
@@ -432,6 +439,35 @@ code {
 }
 .panel h2 { margin-bottom: 14px; }
 .panel-quiet { background: var(--surface-2); box-shadow: none; }
+
+.settings-tool {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 18px;
+  padding: 14px 15px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+}
+.settings-tool-body { min-width: 0; }
+.settings-tool-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.settings-tool-title strong { font-size: .94rem; }
+.settings-tool p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: .84rem;
+  line-height: 1.55;
+}
+.settings-tool .settings-tool-note { margin-top: 4px; color: var(--text-3); }
+.settings-tool-action { flex: 0 0 auto; }
 
 /* ---------- 表单 ---------- */
 
@@ -712,6 +748,8 @@ input:focus, textarea:focus, select:focus {
   .upstream .port { flex: 1; }
   .path-row { flex-wrap: wrap; }
   .path-value { flex: 1 1 100%; order: 3; }
+  .settings-tool { flex-direction: column; align-items: stretch; }
+  .settings-tool-action { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -44,6 +44,31 @@
     如果 Caddy 的数据不在上面这个位置，用 <code>-caddy-data /实际/路径</code> 指定。
     {{end}}
   </p>
+
+  <div class="settings-tool">
+    <div class="settings-tool-body">
+      <div class="settings-tool-title">
+        <strong>仅允许本机访问 81 端口</strong>
+        <span class="tag tag-ok">推荐</span>
+      </div>
+      <p>
+        确认 HTTPS 域名可以访问后，在 VPS 终端执行复制的命令。它会先备份服务文件，
+        再把面板从全网监听改为仅本机监听并重启服务。
+      </p>
+      <p class="settings-tool-note">
+        执行后无法再用 <code>http://服务器IP:81</code> 访问，HTTPS 域名不受影响。
+        仅适用于本项目一键安装的 systemd 部署。
+      </p>
+    </div>
+    <textarea id="bind-local-command" hidden readonly aria-hidden="true" tabindex="-1">sudo cp /etc/systemd/system/caddyui.service /etc/systemd/system/caddyui.service.bak &amp;&amp; \
+sudo sed -i 's/-listen 0\.0\.0\.0:81/-listen 127.0.0.1:81/' /etc/systemd/system/caddyui.service &amp;&amp; \
+sudo systemctl daemon-reload &amp;&amp; \
+sudo systemctl restart caddyui &amp;&amp; \
+sleep 1 &amp;&amp; \
+ss -lntp | grep ':81'</textarea>
+    <button type="button" class="btn btn-primary settings-tool-action"
+            data-copy-target="#bind-local-command">复制修改命令</button>
+  </div>
 </section>
 
 <section class="panel">

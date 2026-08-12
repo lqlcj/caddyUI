@@ -11,7 +11,7 @@
 <body>
 
 {{/* 主题切换按钮。表单提交是没有 JS 时的兜底路径，有 JS 时前端会拦下来就地切换。
-     data-theme 是当前生效的值，空字符串表示跟随系统。 */}}
+     data-theme 是当前生效的值；未保存偏好时服务端默认传入 dark。 */}}
 {{define "themeToggle"}}
 <form method="post" action="/theme" class="theme-form" data-theme-form>
   <input type="hidden" name="theme" value="{{if eq .Theme "dark"}}light{{else}}dark{{end}}">

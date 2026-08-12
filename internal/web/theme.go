@@ -10,26 +10,25 @@ import (
 // 再变黑（localStorage 方案要么闪，要么得靠内联脚本——而面板的 CSP 严到
 // 不允许内联脚本，加 hash 例外只会让这一条防线变松）。
 //
-// 没有 cookie 时值为空，CSS 交给 prefers-color-scheme 处理，跟随系统。
+// 没有 cookie 时使用深色主题；用户手动选择浅色后仍以 cookie 为准。
 const themeCookie = "caddyui_theme"
 
-// 合法的主题值。空字符串表示「跟随系统」。
+// 合法的主题值。
 const (
 	themeLight = "light"
 	themeDark  = "dark"
 )
 
-// themeFrom 读出当前主题，非法值一律当作跟随系统。
+// themeFrom 读出当前主题；没有 cookie 或值不合法时一律使用默认的深色主题。
 func themeFrom(r *http.Request) string {
 	c, err := r.Cookie(themeCookie)
-	if err != nil {
-		return ""
+	if err == nil {
+		switch c.Value {
+		case themeLight, themeDark:
+			return c.Value
+		}
 	}
-	switch c.Value {
-	case themeLight, themeDark:
-		return c.Value
-	}
-	return ""
+	return themeDark
 }
 
 // handleTheme 切换主题。
@@ -50,7 +49,7 @@ func (s *Server) handleTheme(w http.ResponseWriter, r *http.Request) {
 			Expires:  time.Now().AddDate(1, 0, 0),
 		})
 	default:
-		// 其它任何值都当作「恢复跟随系统」，把 cookie 删掉。
+		// 其它任何值都当作「恢复默认深色主题」，把 cookie 删掉。
 		http.SetCookie(w, &http.Cookie{
 			Name: themeCookie, Value: "", Path: "/",
 			SameSite: http.SameSiteLaxMode, MaxAge: -1,

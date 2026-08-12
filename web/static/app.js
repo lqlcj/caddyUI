@@ -18,9 +18,8 @@
   function currentTheme() {
     var m = document.cookie.match(/(?:^|;\s*)caddyui_theme=(light|dark)/);
     if (m) return m[1];
-    // 没有 cookie 就是跟随系统，问一下系统当前是什么。
-    return window.matchMedia &&
-           window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    // 没有 cookie 时与服务端保持一致，默认使用深色主题。
+    return 'dark';
   }
 
   function applyTheme(theme) {
@@ -55,10 +54,15 @@
   // ---------- 2. 复制按钮 ----------
 
   document.addEventListener('click', function (e) {
-    var btn = e.target.closest ? e.target.closest('[data-copy]') : null;
+    var btn = e.target.closest ? e.target.closest('[data-copy], [data-copy-target]') : null;
     if (!btn) return;
 
-    var text = btn.getAttribute('data-copy');
+    var targetSelector = btn.getAttribute('data-copy-target');
+    var target = targetSelector ? document.querySelector(targetSelector) : null;
+    var text = target
+      ? (typeof target.value === 'string' ? target.value : target.textContent)
+      : btn.getAttribute('data-copy');
+    if (text === null) return;
     var done = function () {
       var original = btn.dataset.originalText || btn.textContent;
       btn.dataset.originalText = original;
